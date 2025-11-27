@@ -2,9 +2,15 @@
 
 ## Design Document
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** November 26, 2025  
-**Author:** System Architect
+**Author:** David Harding
+
+**Revision History:**
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | Nov 26, 2025 | Initial design document |
+| 1.1 | Nov 26, 2025 | Added webhook headers feature |
 
 ---
 
@@ -266,10 +272,33 @@ public record RouteGeometry
 /// <summary>
 /// Simulation configuration settings
 /// </summary>
-public record SimulationSettings
+public class SimulationSettings
 {
-    public int IntervalSeconds { get; init; } = 5;
-    public string? WebhookUrlOverride { get; init; }
+    /// <summary>
+    /// Interval between GPS updates in milliseconds
+    /// </summary>
+    public int IntervalMs { get; set; } = 1000;
+    
+    /// <summary>
+    /// Simulation speed in miles per hour
+    /// </summary>
+    public double SpeedMph { get; set; } = 30.0;
+    
+    /// <summary>
+    /// Device identifier for GPS payloads
+    /// </summary>
+    public string DeviceId { get; set; } = "simulator";
+    
+    /// <summary>
+    /// Optional webhook URL override
+    /// </summary>
+    public string? WebhookUrl { get; set; }
+    
+    /// <summary>
+    /// Optional custom headers to send with webhook requests
+    /// Format: "Header1:Value1;Header2:Value2"
+    /// </summary>
+    public string? WebhookHeaders { get; set; }
 }
 
 /// <summary>
@@ -645,3 +674,44 @@ GPSim/
 | POST | `/api/routes` | Create new route | `SimulationRoute` | `SimulationRoute` |
 | PUT | `/api/routes/{id}` | Update route | `SimulationRoute` | `SimulationRoute` |
 | DELETE | `/api/routes/{id}` | Delete route | - | `204 No Content` |
+
+### Webhook Broadcast Endpoint Details
+
+**POST `/api/webhook/broadcast`**
+
+Forwards GPS data to the configured webhook endpoint with optional URL and headers override.
+
+**Query Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `webhookUrl` | string | No | Override the default webhook URL |
+| `webhookHeaders` | string | No | Custom headers in format `Header1:Value1;Header2:Value2` |
+
+**Example Request:**
+```http
+POST /api/webhook/broadcast?webhookUrl=https://custom-endpoint.com/gps&webhookHeaders=Authorization:Bearer%20token123;X-Custom-Header:value
+Content-Type: application/json
+
+{
+  "deviceId": "sim-abc12345",
+  "latitude": 37.7749,
+  "longitude": -122.4194,
+  "altitude": 0,
+  "speed": 12.5,
+  "bearing": 180.0,
+  "accuracy": 5.0,
+  "timestamp": "2025-11-26T20:00:00Z",
+  "sequenceNumber": 42
+}
+```
+
+**Header Parsing:**
+- Headers are semicolon-separated: `Header1:Value1;Header2:Value2`
+- Each header is colon-separated into name and value
+- Headers are URL-encoded in the query parameter
+- Empty or whitespace-only headers are ignored
+
+**Common Use Cases:**
+- `Authorization:Bearer <token>` - API authentication
+- `X-API-Key:<key>` - API key authentication
+- `Content-Type:application/json` - Content type override (default is already JSON)
