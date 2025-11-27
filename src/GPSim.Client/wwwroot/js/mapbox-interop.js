@@ -52,6 +52,14 @@ window.mapboxInterop = {
                 this.map.on('load', () => {
                     console.log('Mapbox map loaded successfully');
                     
+                    // Set up zoom change listener
+                    this.map.on('zoom', () => {
+                        if (this.dotNetRef) {
+                            const zoom = this.map.getZoom();
+                            this.dotNetRef.invokeMethodAsync('OnZoomChanged', zoom);
+                        }
+                    });
+                    
                     // Try to get user's location and center the map
                     if (navigator.geolocation) {
                         navigator.geolocation.getCurrentPosition(
@@ -659,6 +667,17 @@ window.mapboxInterop = {
             return { lng: pos.lng, lat: pos.lat };
         }
         return null;
+    },
+
+    /**
+     * Get current map zoom level
+     * @returns {number} Current zoom level
+     */
+    getZoom: function () {
+        if (this.map) {
+            return this.map.getZoom();
+        }
+        return 12; // Default zoom
     },
 
     /**

@@ -14,6 +14,7 @@ public class MapboxInteropService : IAsyncDisposable
 
     public event Func<double, double, Task>? OnMapClicked;
     public event Func<double, double, Task>? OnInitialLocationReceived;
+    public event Func<double, Task>? OnZoomLevelChanged;
 
     public MapboxInteropService(IJSRuntime jsRuntime)
     {
@@ -197,6 +198,14 @@ public class MapboxInteropService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Get current map zoom level
+    /// </summary>
+    public async Task<double> GetZoomAsync()
+    {
+        return await _jsRuntime.InvokeAsync<double>("mapboxInterop.getZoom");
+    }
+
+    /// <summary>
     /// JavaScript callback when map is clicked
     /// </summary>
     [JSInvokable]
@@ -217,6 +226,18 @@ public class MapboxInteropService : IAsyncDisposable
         if (OnInitialLocationReceived != null)
         {
             await OnInitialLocationReceived.Invoke(longitude, latitude);
+        }
+    }
+
+    /// <summary>
+    /// JavaScript callback when zoom level changes
+    /// </summary>
+    [JSInvokable]
+    public async Task OnZoomChanged(double zoomLevel)
+    {
+        if (OnZoomLevelChanged != null)
+        {
+            await OnZoomLevelChanged.Invoke(zoomLevel);
         }
     }
 

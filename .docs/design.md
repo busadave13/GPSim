@@ -2,8 +2,8 @@
 
 ## Design Document
 
-**Version:** 1.1  
-**Date:** November 26, 2025  
+**Version:** 1.2  
+**Date:** November 27, 2025  
 **Author:** David Harding
 
 **Revision History:**
@@ -11,6 +11,7 @@
 |---------|------|---------|
 | 1.0 | Nov 26, 2025 | Initial design document |
 | 1.1 | Nov 26, 2025 | Added webhook headers feature |
+| 1.2 | Nov 27, 2025 | Added automatic geolocation, continuous simulation mode, speed limit matching, zoom level tracking |
 
 ---
 
@@ -37,6 +38,42 @@ GPSim is a web-based GPS driver simulation application that allows users to:
 - Multi-user collaboration
 - Historical simulation replay analytics
 - Mobile native applications
+
+### Current Implementation Features (v1.2)
+
+The following features have been implemented:
+
+1. **Automatic Geolocation**
+   - Map automatically centers on user's current location on startup
+   - Uses browser's Geolocation API with permission request
+   - Falls back to San Francisco if geolocation is denied or unavailable
+
+2. **Continuous Simulation Mode**
+   - GPS updates are sent continuously whether stationary or moving
+   - Three simulation modes: Initializing, Stationary, Moving
+   - Automatic transition between modes based on user interaction
+
+3. **Speed Limit Matching**
+   - Requests maxspeed annotations from Mapbox Directions API
+   - Option to match posted speed limits when available
+   - Configurable fallback speed when speed limits are unknown
+
+4. **Real-time Status Display**
+   - Current coordinates (lat/lng)
+   - Simulation progress percentage
+   - Current speed and speed limit (when available)
+   - Total GPS updates sent (sequence number)
+   - Current map zoom level
+
+5. **Click-to-Navigate**
+   - Single click anywhere on map sets destination
+   - Automatic route calculation from current position
+   - Smooth marker animation along route with bearing indicators
+
+6. **Radius Circle Visualization**
+   - Configurable radius circle drawn around current position
+   - Indicates area of interest around the simulated driver
+   - Radius configurable via server settings
 
 ---
 
