@@ -17,8 +17,45 @@ A web-based GPS simulation application using Mapbox for mapping and route visual
 
 ## Prerequisites
 
-- .NET 9.0 SDK
+- .NET 9.0 SDK (for local development)
+- Docker (for containerized deployment)
 - A Mapbox access token (get one at https://account.mapbox.com/)
+
+## Quick Start with Docker
+
+The easiest way to run GPSim is with Docker:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/busadave13/GPSim.git
+cd GPSim
+
+# 2. Copy environment template and add your Mapbox token
+cp .env.example .env
+# Edit .env and set MAPBOX_ACCESS_TOKEN=your_token_here
+
+# 3. Build and run
+docker compose up --build
+
+# 4. Open browser
+# Navigate to http://localhost:4000
+```
+
+### Docker Commands
+
+```bash
+# Run in background (detached mode)
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop the container
+docker compose down
+
+# Rebuild after code changes
+docker compose up --build
+```
 
 ## Configuration
 
