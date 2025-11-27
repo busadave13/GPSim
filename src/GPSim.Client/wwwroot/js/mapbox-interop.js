@@ -5,12 +5,17 @@ window.mapboxInterop = {
     homeMarker: null,
     routeLine: null,
     directionsLayer: null,
+    radiusCircle: null,
+    dotNetRef: null,
 
     /**
      * Initialize the Mapbox map
      */
-    initialize: function (containerId, accessToken, center, zoom) {
-        console.log('Initializing Mapbox map...', { containerId, center, zoom });
+    initialize: function (containerId, accessToken, center, zoom, circleRadiusMiles) {
+        console.log('Initializing Mapbox map...', { containerId, center, zoom, circleRadiusMiles });
+        
+        // Store the circle radius for later use
+        this.circleRadiusMiles = circleRadiusMiles || 0.1;
         
         if (!accessToken) {
             console.error('Mapbox access token is required!');
@@ -47,6 +52,14 @@ window.mapboxInterop = {
                 this.map.on('load', () => {
                     console.log('Mapbox map loaded successfully');
                     
+                    // Set up zoom change listener
+                    this.map.on('zoom', () => {
+                        if (this.dotNetRef) {
+                            const zoom = this.map.getZoom();
+                            this.dotNetRef.invokeMethodAsync('OnZoomChanged', zoom);
+                        }
+                    });
+                    
                     // Try to get user's location and center the map
                     if (navigator.geolocation) {
                         navigator.geolocation.getCurrentPosition(
@@ -61,8 +74,16 @@ window.mapboxInterop = {
                                     essential: true
                                 });
                                 
-                                // Place home marker at user's location
-                                this.setHomeMarker(lng, lat);
+                                // Place driver marker at user's location and notify Blazor
+                                this.setMarker(lng, lat, 0);
+                                
+                                // Draw radius circle around user using configured radius
+                                this.drawRadiusCircle(lng, lat, this.circleRadiusMiles);
+                                
+                                // Notify Blazor of initial location
+                                if (this.dotNetRef) {
+                                    this.dotNetRef.invokeMethodAsync('OnInitialLocation', lng, lat);
+                                }
                             },
                             (error) => {
                                 console.warn('Geolocation error:', error.message);
@@ -91,9 +112,11 @@ window.mapboxInterop = {
 
     /**
      * Get directions between two points using Mapbox Directions API
+     * Includes speed limit annotations for each route segment
      */
     getDirections: async function (accessToken, origin, destination, profile = 'driving') {
-        const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${origin[0]},${origin[1]};${destination[0]},${destination[1]}?geometries=geojson&overview=full&access_token=${accessToken}`;
+        // Request maxspeed annotations along with the route
+        const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${origin[0]},${origin[1]};${destination[0]},${destination[1]}?geometries=geojson&overview=full&annotations=maxspeed&access_token=${accessToken}`;
 
         try {
             const response = await fetch(url);
@@ -101,11 +124,36 @@ window.mapboxInterop = {
 
             if (data.routes && data.routes.length > 0) {
                 const route = data.routes[0];
+                
+                // Parse speed limits from annotations
+                let speedLimits = [];
+                if (route.legs && route.legs.length > 0) {
+                    for (const leg of route.legs) {
+                        if (leg.annotation && leg.annotation.maxspeed) {
+                            for (const speedData of leg.annotation.maxspeed) {
+                                // Convert to mph - Mapbox returns either speed+unit or "unknown":true or "none":true
+                                let speedMph = null;
+                                if (speedData.speed !== undefined) {
+                                    if (speedData.unit === 'km/h') {
+                                        speedMph = Math.round(speedData.speed * 0.621371);
+                                    } else if (speedData.unit === 'mph') {
+                                        speedMph = speedData.speed;
+                                    }
+                                }
+                                speedLimits.push(speedMph); // null means unknown
+                            }
+                        }
+                    }
+                }
+                
+                console.log('Route fetched with', speedLimits.length, 'speed limit segments');
+                
                 return {
                     coordinates: route.geometry.coordinates,
                     distance: route.distance,
                     duration: route.duration,
-                    geometry: route.geometry
+                    geometry: route.geometry,
+                    speedLimits: speedLimits
                 };
             }
             return null;
@@ -265,6 +313,9 @@ window.mapboxInterop = {
      * Get click coordinates from the map
      */
     enableClickCapture: function (dotNetRef) {
+        // Store the reference for callbacks
+        this.dotNetRef = dotNetRef;
+        
         this.map.on('click', (e) => {
             dotNetRef.invokeMethodAsync('OnMapClick', e.lngLat.lng, e.lngLat.lat);
         });
@@ -399,16 +450,18 @@ window.mapboxInterop = {
 
     /**
      * Interpolate a position along the route at a given fraction
+     * Returns position, bearing, and segment index for speed limit lookup
      */
     interpolatePosition: function (coordinates, fraction) {
         if (!coordinates || coordinates.length < 2) return null;
-        if (fraction <= 0) return { position: coordinates[0], bearing: 0 };
+        if (fraction <= 0) return { position: coordinates[0], bearing: 0, segmentIndex: 0 };
         if (fraction >= 1) return {
             position: coordinates[coordinates.length - 1],
             bearing: this.calculateBearing(
                 coordinates[coordinates.length - 2],
                 coordinates[coordinates.length - 1]
-            )
+            ),
+            segmentIndex: coordinates.length - 2
         };
 
         // Calculate total distance
@@ -435,14 +488,15 @@ window.mapboxInterop = {
                 const lat = start[1] + (end[1] - start[1]) * segmentFraction;
                 const bearing = this.calculateBearing(start, end);
 
-                return { position: [lng, lat], bearing: bearing };
+                return { position: [lng, lat], bearing: bearing, segmentIndex: i };
             }
             accumulatedDistance += distances[i];
         }
 
         return {
             position: coordinates[coordinates.length - 1],
-            bearing: 0
+            bearing: 0,
+            segmentIndex: coordinates.length - 2
         };
     },
 
@@ -478,9 +532,159 @@ window.mapboxInterop = {
     },
 
     /**
+     * Draw a radius circle around a point
+     * @param {number} lng - Longitude of center
+     * @param {number} lat - Latitude of center
+     * @param {number} radiusMiles - Radius in miles
+     */
+    drawRadiusCircle: function (lng, lat, radiusMiles) {
+        console.log('drawRadiusCircle called:', { lng, lat, radiusMiles });
+        
+        try {
+            // Remove existing circle if any
+            this.removeRadiusCircle();
+            
+            // Convert miles to meters (1 mile = 1609.344 meters)
+            const radiusMeters = radiusMiles * 1609.344;
+            
+            // Create a circle using turf.js style calculation
+            const points = 64;
+            const coordinates = [];
+            
+            for (let i = 0; i <= points; i++) {
+                const angle = (i / points) * 360;
+                const point = this.destinationPoint(lng, lat, radiusMeters, angle);
+                coordinates.push(point);
+            }
+            
+            // Check if source already exists (shouldn't happen after removeRadiusCircle, but just in case)
+            if (this.map.getSource('radius-circle')) {
+                console.warn('Source already exists, updating data');
+                this.map.getSource('radius-circle').setData({
+                    type: 'Feature',
+                    properties: {},
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [coordinates]
+                    }
+                });
+                return;
+            }
+            
+            // Add the circle source and layer
+            this.map.addSource('radius-circle', {
+                type: 'geojson',
+                data: {
+                    type: 'Feature',
+                    properties: {},
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [coordinates]
+                    }
+                }
+            });
+            
+            // Add fill layer
+            this.map.addLayer({
+                id: 'radius-circle-fill',
+                type: 'fill',
+                source: 'radius-circle',
+                paint: {
+                    'fill-color': '#4285F4',
+                    'fill-opacity': 0.1
+                }
+            });
+            
+            // Add outline layer
+            this.map.addLayer({
+                id: 'radius-circle-outline',
+                type: 'line',
+                source: 'radius-circle',
+                paint: {
+                    'line-color': '#4285F4',
+                    'line-width': 2,
+                    'line-opacity': 0.6
+                }
+            });
+            
+            console.log('Radius circle drawn successfully:', radiusMiles, 'miles at', lng, lat);
+        } catch (error) {
+            console.error('Error drawing radius circle:', error);
+        }
+    },
+    
+    /**
+     * Remove the radius circle from the map
+     */
+    removeRadiusCircle: function () {
+        if (this.map.getLayer('radius-circle-fill')) {
+            this.map.removeLayer('radius-circle-fill');
+        }
+        if (this.map.getLayer('radius-circle-outline')) {
+            this.map.removeLayer('radius-circle-outline');
+        }
+        if (this.map.getSource('radius-circle')) {
+            this.map.removeSource('radius-circle');
+        }
+    },
+    
+    /**
+     * Calculate destination point given start, distance and bearing
+     * @param {number} lng - Start longitude
+     * @param {number} lat - Start latitude
+     * @param {number} distanceMeters - Distance in meters
+     * @param {number} bearingDegrees - Bearing in degrees
+     * @returns {Array} [lng, lat] of destination point
+     */
+    destinationPoint: function (lng, lat, distanceMeters, bearingDegrees) {
+        const R = 6371000; // Earth's radius in meters
+        const d = distanceMeters / R; // Angular distance
+        const brng = bearingDegrees * Math.PI / 180; // Bearing in radians
+        
+        const lat1 = lat * Math.PI / 180;
+        const lng1 = lng * Math.PI / 180;
+        
+        const lat2 = Math.asin(
+            Math.sin(lat1) * Math.cos(d) +
+            Math.cos(lat1) * Math.sin(d) * Math.cos(brng)
+        );
+        
+        const lng2 = lng1 + Math.atan2(
+            Math.sin(brng) * Math.sin(d) * Math.cos(lat1),
+            Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+        );
+        
+        return [lng2 * 180 / Math.PI, lat2 * 180 / Math.PI];
+    },
+
+    /**
+     * Get current marker position
+     * @returns {Object|null} {lng, lat} or null if no marker
+     */
+    getMarkerPosition: function () {
+        if (this.marker) {
+            const pos = this.marker.getLngLat();
+            return { lng: pos.lng, lat: pos.lat };
+        }
+        return null;
+    },
+
+    /**
+     * Get current map zoom level
+     * @returns {number} Current zoom level
+     */
+    getZoom: function () {
+        if (this.map) {
+            return this.map.getZoom();
+        }
+        return 12; // Default zoom
+    },
+
+    /**
      * Cleanup and destroy the map
      */
     destroy: function () {
+        this.removeRadiusCircle();
         if (this.marker) {
             this.marker.remove();
             this.marker = null;

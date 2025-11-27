@@ -5,15 +5,19 @@ A web-based GPS simulation application using Mapbox for mapping and route visual
 ## Features
 
 - **Interactive Map**: Mapbox GL JS integration for route planning
-- **Route Planning**: Click to set start/end points, get directions from Mapbox Directions API
-- **Simulation Controls**: Start, pause, resume, and stop simulations
-- **Real-time Updates**: Smooth marker animation along the route
+- **Automatic Location Detection**: Map centers on your current location on startup (with browser permission)
+- **Route Planning**: Click anywhere to set a destination, automatic route calculation via Mapbox Directions API
+- **Continuous GPS Simulation**: Automatically sends GPS updates whether stationary or moving
+- **Real-time Updates**: Smooth marker animation along the route with bearing indicators
+- **Speed Limit Matching**: Option to simulate driving at posted speed limits (where available)
 - **Webhook Integration**: Send GPS coordinates to external services at configurable intervals
 - **Configurable Settings**:
   - Update interval (100ms - 10000ms)
-  - Speed multiplier (0.1x - 10x)
+  - Simulated driving speed (MPH)
+  - Speed limit matching mode
   - Custom device ID
-  - Optional webhook URL override
+  - Optional webhook URL and headers override
+- **Visual Feedback**: Displays current position, zoom level, speed, and update count in real-time
 
 ## Prerequisites
 
@@ -92,22 +96,31 @@ Update `src/GPSim.Server/appsettings.json` with your settings:
 
 ## Usage
 
-1. **Set Route**:
-   - Click "Set Start" and click on the map to place the starting point
-   - Click "Set End" and click on the map to place the destination
-   - Click "Get Directions" to fetch the route from Mapbox
+1. **Initial Setup**:
+   - When the app loads, it will request your browser's location permission
+   - If granted, the map centers on your current location
+   - A radius circle is drawn around your position
+   - GPS updates begin sending immediately (stationary mode)
 
-2. **Configure Simulation**:
-   - Adjust the update interval (how often GPS data is sent)
-   - Set the speed multiplier (1x = real-time, 10x = 10 times faster)
-   - Customize the device ID if needed
-   - Optionally set a custom webhook URL
+2. **Set Destination**:
+   - Click anywhere on the map to set a destination
+   - A route is automatically calculated from your current position
+   - The simulated driver begins moving along the route
 
-3. **Run Simulation**:
-   - Click "Start" to begin the simulation
-   - Watch the marker move along the route
-   - Use "Pause" to temporarily stop, "Resume" to continue
-   - Click "Stop" to end the simulation
+3. **Configure Settings**:
+   - **Update Interval**: How often GPS data is sent (100ms - 10000ms)
+   - **Match Speed Limits**: Toggle to use posted speed limits when available
+   - **Speed (MPH)**: Set driving speed (or fallback speed when speed limits unavailable)
+   - **Device ID**: Customize the device identifier in GPS payloads
+   - **Webhook URL**: Optionally override the server-configured webhook
+   - **Webhook Headers**: Add custom headers (format: `Header1:Value1;Header2:Value2`)
+
+4. **Monitor Status**:
+   - View current latitude/longitude coordinates
+   - See simulation progress percentage when moving
+   - Monitor current speed and speed limit (when available)
+   - Track total GPS updates sent
+   - View current map zoom level
 
 ## GPS Payload Format
 

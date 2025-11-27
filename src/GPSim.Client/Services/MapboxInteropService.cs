@@ -13,6 +13,8 @@ public class MapboxInteropService : IAsyncDisposable
     private string? _accessToken;
 
     public event Func<double, double, Task>? OnMapClicked;
+    public event Func<double, double, Task>? OnInitialLocationReceived;
+    public event Func<double, Task>? OnZoomLevelChanged;
 
     public MapboxInteropService(IJSRuntime jsRuntime)
     {
@@ -22,10 +24,10 @@ public class MapboxInteropService : IAsyncDisposable
     /// <summary>
     /// Initialize the Mapbox map
     /// </summary>
-    public async Task InitializeAsync(string containerId, string accessToken, double[]? center = null, int zoom = 12)
+    public async Task InitializeAsync(string containerId, string accessToken, double[]? center = null, int zoom = 12, double circleRadiusMiles = 0.1)
     {
         _accessToken = accessToken;
-        await _jsRuntime.InvokeVoidAsync("mapboxInterop.initialize", containerId, accessToken, center, zoom);
+        await _jsRuntime.InvokeVoidAsync("mapboxInterop.initialize", containerId, accessToken, center, zoom, circleRadiusMiles);
     }
 
     /// <summary>
@@ -55,7 +57,8 @@ public class MapboxInteropService : IAsyncDisposable
             Type = "LineString",
             Coordinates = result.Coordinates.ToList(),
             DistanceMeters = result.Distance,
-            DurationSeconds = result.Duration
+            DurationSeconds = result.Duration,
+            SpeedLimits = result.SpeedLimits?.ToList() ?? new List<int?>()
         };
     }
 
@@ -171,6 +174,38 @@ public class MapboxInteropService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Draw a radius circle around a point
+    /// </summary>
+    public async Task DrawRadiusCircleAsync(double longitude, double latitude, double radiusMiles = 0.5)
+    {
+        await _jsRuntime.InvokeVoidAsync("mapboxInterop.drawRadiusCircle", longitude, latitude, radiusMiles);
+    }
+
+    /// <summary>
+    /// Remove the radius circle from the map
+    /// </summary>
+    public async Task RemoveRadiusCircleAsync()
+    {
+        await _jsRuntime.InvokeVoidAsync("mapboxInterop.removeRadiusCircle");
+    }
+
+    /// <summary>
+    /// Get current marker position
+    /// </summary>
+    public async Task<MarkerPosition?> GetMarkerPositionAsync()
+    {
+        return await _jsRuntime.InvokeAsync<MarkerPosition?>("mapboxInterop.getMarkerPosition");
+    }
+
+    /// <summary>
+    /// Get current map zoom level
+    /// </summary>
+    public async Task<double> GetZoomAsync()
+    {
+        return await _jsRuntime.InvokeAsync<double>("mapboxInterop.getZoom");
+    }
+
+    /// <summary>
     /// JavaScript callback when map is clicked
     /// </summary>
     [JSInvokable]
@@ -179,6 +214,30 @@ public class MapboxInteropService : IAsyncDisposable
         if (OnMapClicked != null)
         {
             await OnMapClicked.Invoke(longitude, latitude);
+        }
+    }
+
+    /// <summary>
+    /// JavaScript callback when initial location is detected
+    /// </summary>
+    [JSInvokable]
+    public async Task OnInitialLocation(double longitude, double latitude)
+    {
+        if (OnInitialLocationReceived != null)
+        {
+            await OnInitialLocationReceived.Invoke(longitude, latitude);
+        }
+    }
+
+    /// <summary>
+    /// JavaScript callback when zoom level changes
+    /// </summary>
+    [JSInvokable]
+    public async Task OnZoomChanged(double zoomLevel)
+    {
+        if (OnZoomLevelChanged != null)
+        {
+            await OnZoomLevelChanged.Invoke(zoomLevel);
         }
     }
 
@@ -205,6 +264,11 @@ public record DirectionsResult
     public double[][] Coordinates { get; init; } = Array.Empty<double[]>();
     public double Distance { get; init; }
     public double Duration { get; init; }
+
+    /// <summary>
+    /// Speed limits for each segment in mph (null means unknown)
+    /// </summary>
+    public int?[]? SpeedLimits { get; init; }
 }
 
 /// <summary>
@@ -214,4 +278,18 @@ public record InterpolatedPosition
 {
     public double[] Position { get; init; } = Array.Empty<double>();
     public double Bearing { get; init; }
+
+    /// <summary>
+    /// Current segment index for speed limit lookup
+    /// </summary>
+    public int SegmentIndex { get; init; }
+}
+
+/// <summary>
+/// Marker position result
+/// </summary>
+public record MarkerPosition
+{
+    public double Lng { get; init; }
+    public double Lat { get; init; }
 }
