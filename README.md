@@ -2,6 +2,8 @@
 
 A web-based GPS simulation application using Mapbox for mapping and route visualization. This tool allows you to simulate a driver moving along a route with configurable intervals and send GPS coordinates to an external webhook.
 
+![GPSim Application](.docs/images/gpsim-application.png)
+
 ## Features
 
 - **Interactive Map**: Mapbox GL JS integration for route planning
