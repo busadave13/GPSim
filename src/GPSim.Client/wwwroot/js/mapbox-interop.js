@@ -176,11 +176,10 @@ window.mapboxInterop = {
     setMarker: function (lng, lat, bearing = 0) {
         if (this.marker) {
             this.marker.setLngLat([lng, lat]);
-            // Update rotation based on bearing
-            const el = this.marker.getElement();
-            el.style.transform = `rotate(${bearing}deg)`;
+            // Update rotation using Mapbox's built-in rotation
+            this.marker.setRotation(bearing);
         } else {
-            // Create custom marker element
+            // Create custom marker element with arrow pointing UP (North = 0°)
             const el = document.createElement('div');
             el.className = 'driver-marker';
             el.innerHTML = `
@@ -195,9 +194,11 @@ window.mapboxInterop = {
 
             this.marker = new mapboxgl.Marker({
                 element: el,
-                anchor: 'center'
+                anchor: 'center',
+                rotationAlignment: 'map'  // Rotate with the map for realistic navigation
             })
                 .setLngLat([lng, lat])
+                .setRotation(bearing)
                 .addTo(this.map);
         }
     },
@@ -228,9 +229,8 @@ window.mapboxInterop = {
 
             this.marker.setLngLat([newLng, newLat]);
 
-            // Update bearing
-            const el = this.marker.getElement();
-            el.style.transform = `rotate(${bearing}deg)`;
+            // Update bearing using Mapbox's built-in rotation
+            this.marker.setRotation(bearing);
 
             if (progress < 1) {
                 requestAnimationFrame(animate);
