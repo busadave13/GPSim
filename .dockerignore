@@ -1,0 +1,54 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE and editor files
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build outputs
+**/bin/
+**/obj/
+**/out/
+
+# NuGet packages (will be restored during build)
+**/packages/
+
+# Test results
+**/TestResults/
+**/*.trx
+
+# Documentation
+*.md
+!README.md
+.docs/
+
+# Environment files (secrets)
+**/.env
+!**/.env.example
+
+# Memory bank and other non-essential files
+memory-bank/
+
+# Docker files (not needed in build context recursively)
+**/Dockerfile*
+**/docker-compose*
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# License (not needed in container)
+LICENSE

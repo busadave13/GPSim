@@ -1,0 +1,34 @@
+# GPSim Docker Compose Configuration
+# Run with: docker compose up --build
+
+services:
+  gpsim:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gpsim-server
+    ports:
+      - "4000:8080"
+    environment:
+      # ASP.NET Core environment
+      - ASPNETCORE_ENVIRONMENT=Development
+      # Mapbox configuration (from .env file)
+      - Mapbox__AccessToken=${MAPBOX_ACCESS_TOKEN}
+      # Optional: Webhook configuration overrides
+      # - Webhook__DefaultUrl=${WEBHOOK_URL}
+      # - Webhook__TimeoutSeconds=30
+      # - Webhook__RetryCount=3
+    volumes:
+      # Persist route data
+      - gpsim-data:/app/Data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/config/mapbox"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  gpsim-data:
+    name: gpsim-routes-data
