@@ -26,7 +26,8 @@ public class ConfigurationController : ControllerBase
     {
         return Ok(new MapboxConfigResponse
         {
-            AccessToken = _mapboxSettings.AccessToken
+            AccessToken = _mapboxSettings.AccessToken,
+            CircleRadiusMiles = _mapboxSettings.CircleRadiusMiles
         });
     }
 }
@@ -37,4 +38,5 @@ public class ConfigurationController : ControllerBase
 public record MapboxConfigResponse
 {
     public string AccessToken { get; init; } = string.Empty;
+    public double CircleRadiusMiles { get; init; } = 0.1;
 }
