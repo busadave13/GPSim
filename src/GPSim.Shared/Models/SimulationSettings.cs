@@ -24,4 +24,10 @@ public class SimulationSettings
     /// Optional webhook URL override
     /// </summary>
     public string? WebhookUrl { get; set; }
+
+    /// <summary>
+    /// Optional custom headers to send with webhook requests
+    /// Format: "Header1:Value1;Header2:Value2"
+    /// </summary>
+    public string? WebhookHeaders { get; set; }
 }

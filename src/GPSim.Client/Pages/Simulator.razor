@@ -88,6 +88,14 @@
                        placeholder="Optional override"
                        disabled="@(SimulationState != SimulationStatus.Idle)" />
             </div>
+            
+            <div class="mb-2">
+                <label class="form-label">Webhook Headers</label>
+                <input type="text" class="form-control form-control-sm" 
+                       @bind="Settings.WebhookHeaders"
+                       placeholder="Header1:Value1;Header2:Value2"
+                       disabled="@(SimulationState != SimulationStatus.Idle)" />
+            </div>
         </div>
         
         <!-- Simulation Controls -->
@@ -434,9 +442,22 @@
                 SequenceNumber = SequenceNumber
             };
             
-            var url = string.IsNullOrEmpty(Settings.WebhookUrl) 
-                ? "api/webhook/broadcast" 
-                : $"api/webhook/broadcast?webhookUrl={Uri.EscapeDataString(Settings.WebhookUrl)}";
+            // Build URL with optional webhook URL and headers
+            var queryParams = new List<string>();
+            
+            if (!string.IsNullOrEmpty(Settings.WebhookUrl))
+            {
+                queryParams.Add($"webhookUrl={Uri.EscapeDataString(Settings.WebhookUrl)}");
+            }
+            
+            if (!string.IsNullOrEmpty(Settings.WebhookHeaders))
+            {
+                queryParams.Add($"webhookHeaders={Uri.EscapeDataString(Settings.WebhookHeaders)}");
+            }
+            
+            var url = queryParams.Count > 0 
+                ? $"api/webhook/broadcast?{string.Join("&", queryParams)}" 
+                : "api/webhook/broadcast";
             
             await Http.PostAsJsonAsync(url, payload);
         }

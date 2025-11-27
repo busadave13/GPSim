@@ -29,12 +29,13 @@ public class WebhookController : ControllerBase
     public async Task<IActionResult> Broadcast(
         [FromBody] GpsPayload payload,
         [FromQuery] string? webhookUrl = null,
+        [FromQuery] string? webhookHeaders = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Received GPS broadcast request: Lat={Lat}, Lng={Lng}, Seq={Seq}",
             payload.Latitude, payload.Longitude, payload.SequenceNumber);
 
-        var success = await _webhookService.ForwardAsync(payload, webhookUrl, cancellationToken);
+        var success = await _webhookService.ForwardAsync(payload, webhookUrl, webhookHeaders, cancellationToken);
 
         if (success)
         {
