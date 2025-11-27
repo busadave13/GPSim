@@ -1,0 +1,529 @@
+@page "/"
+@page "/simulator"
+@using GPSim.Client.Services
+@using GPSim.Shared.Models
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<div class="simulator-container" style="position: relative; width: 100%; height: 100vh;">
+    <!-- Map Container -->
+    <div id="map" class="map-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+    
+    <!-- Control Panel -->
+    <div class="control-panel">
+        <h5 class="mb-3">🚗 GPS Simulator</h5>
+        
+        <!-- Route Planning Section -->
+        <div class="mb-3">
+            <div class="section-title">Route Planning</div>
+            <div class="btn-group btn-group-sm w-100 mb-2">
+                <button class="btn @(IsSettingStart ? "btn-success" : "btn-outline-success")" 
+                        @onclick="() => StartSettingWaypoint(true)"
+                        disabled="@(SimulationState != SimulationStatus.Idle)">
+                    📍 Set Start
+                </button>
+                <button class="btn @(IsSettingEnd ? "btn-danger" : "btn-outline-danger")" 
+                        @onclick="() => StartSettingWaypoint(false)"
+                        disabled="@(SimulationState != SimulationStatus.Idle)">
+                    🏁 Set End
+                </button>
+            </div>
+            
+            @if (StartPoint != null)
+            {
+                <div class="coordinate-display mb-1">
+                    <small><strong>Start:</strong> @StartPoint.Latitude.ToString("F6"), @StartPoint.Longitude.ToString("F6")</small>
+                </div>
+            }
+            @if (EndPoint != null)
+            {
+                <div class="coordinate-display mb-2">
+                    <small><strong>End:</strong> @EndPoint.Latitude.ToString("F6"), @EndPoint.Longitude.ToString("F6")</small>
+                </div>
+            }
+            
+            <button class="btn btn-primary btn-sm w-100" 
+                    @onclick="GetDirections"
+                    disabled="@(StartPoint == null || EndPoint == null || IsLoadingRoute)">
+                @if (IsLoadingRoute)
+                {
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                }
+                Get Directions
+            </button>
+        </div>
+        
+        <!-- Simulation Settings -->
+        <div class="mb-3">
+            <div class="section-title">Simulation Settings</div>
+            
+            <div class="mb-2">
+                <label class="form-label">Update Interval (ms)</label>
+                <input type="number" class="form-control form-control-sm" 
+                       @bind="Settings.IntervalMs" 
+                       min="100" max="10000" step="100"
+                       disabled="@(SimulationState != SimulationStatus.Idle)" />
+            </div>
+            
+            <div class="mb-2">
+                <label class="form-label">Speed (MPH)</label>
+                <input type="number" class="form-control form-control-sm" 
+                       @bind="Settings.SpeedMph" 
+                       min="1" max="200" step="1"
+                       disabled="@(SimulationState != SimulationStatus.Idle)" />
+            </div>
+            
+            <div class="mb-2">
+                <label class="form-label">Device ID</label>
+                <input type="text" class="form-control form-control-sm" 
+                       @bind="Settings.DeviceId"
+                       disabled="@(SimulationState != SimulationStatus.Idle)" />
+            </div>
+            
+            <div class="mb-2">
+                <label class="form-label">Webhook URL</label>
+                <input type="text" class="form-control form-control-sm" 
+                       @bind="Settings.WebhookUrl"
+                       placeholder="Optional override"
+                       disabled="@(SimulationState != SimulationStatus.Idle)" />
+            </div>
+            
+            <div class="mb-2">
+                <label class="form-label">Webhook Headers</label>
+                <input type="text" class="form-control form-control-sm" 
+                       @bind="Settings.WebhookHeaders"
+                       placeholder="Header1:Value1;Header2:Value2"
+                       disabled="@(SimulationState != SimulationStatus.Idle)" />
+            </div>
+        </div>
+        
+        <!-- Simulation Controls -->
+        <div class="mb-3">
+            <div class="section-title">Controls</div>
+            <div class="btn-group w-100">
+                @if (SimulationState == SimulationStatus.Idle)
+                {
+                    <button class="btn btn-success" @onclick="StartSimulation" disabled="@(CurrentRoute == null)">
+                        ▶️ Start
+                    </button>
+                }
+                else if (SimulationState == SimulationStatus.Running)
+                {
+                    <button class="btn btn-warning" @onclick="PauseSimulation">
+                        ⏸️ Pause
+                    </button>
+                }
+                else if (SimulationState == SimulationStatus.Paused)
+                {
+                    <button class="btn btn-success" @onclick="ResumeSimulation">
+                        ▶️ Resume
+                    </button>
+                }
+                <button class="btn btn-danger" @onclick="StopSimulation" 
+                        disabled="@(SimulationState == SimulationStatus.Idle)">
+                    ⏹️ Stop
+                </button>
+            </div>
+        </div>
+        
+        <!-- Clear Button -->
+        <button class="btn btn-outline-secondary btn-sm w-100" @onclick="ClearAll"
+                disabled="@(SimulationState != SimulationStatus.Idle)">
+            🗑️ Clear All
+        </button>
+    </div>
+    
+    <!-- Status Panel -->
+    <div class="simulation-status">
+        <span class="status-indicator @GetStatusClass()"></span>
+        <span>@SimulationState</span>
+        @if (SimulationState != SimulationStatus.Idle && CurrentPosition != null)
+        {
+            <div class="coordinate-display mt-2" style="font-size: 0.75rem;">
+                <div>Lat: @CurrentPosition.Latitude.ToString("F6")</div>
+                <div>Lng: @CurrentPosition.Longitude.ToString("F6")</div>
+                <div>Progress: @((SimulationProgress * 100).ToString("F1"))%</div>
+                <div>Seq: @SequenceNumber</div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private MapboxInteropService? _mapService;
+    private string? _accessToken;
+    private CancellationTokenSource? _simulationCts;
+    private Task? _simulationTask;
+    
+    // Route planning state
+    private Coordinate? StartPoint;
+    private Coordinate? EndPoint;
+    private bool IsSettingStart;
+    private bool IsSettingEnd;
+    private bool IsLoadingRoute;
+    private RouteGeometry? CurrentRoute;
+    
+    // Simulation state
+    private SimulationSettings Settings = new()
+    {
+        IntervalMs = 100,
+        SpeedMph = 30.0,
+        DeviceId = $"sim-{Guid.NewGuid().ToString()[..8]}",
+        WebhookUrl = null
+    };
+    
+    private SimulationStatus SimulationState = SimulationStatus.Idle;
+    private double SimulationProgress = 0;
+    private int SequenceNumber = 0;
+    private Coordinate? CurrentPosition;
+    private DateTime SimulationStartTime;
+    private bool _isPaused = false;
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeMapAsync();
+        }
+    }
+    
+    private async Task InitializeMapAsync()
+    {
+        try
+        {
+            // Get Mapbox access token from server
+            var config = await Http.GetFromJsonAsync<MapboxConfig>("api/configuration/mapbox");
+            if (config != null)
+            {
+                _accessToken = config.AccessToken;
+            }
+            
+            _mapService = new MapboxInteropService(JSRuntime);
+            await _mapService.InitializeAsync("map", _accessToken ?? "", null, 12);
+            
+            _mapService.OnMapClicked += OnMapClickedAsync;
+            await _mapService.EnableClickCaptureAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing map: {ex.Message}");
+        }
+    }
+    
+    private void StartSettingWaypoint(bool isStart)
+    {
+        IsSettingStart = isStart;
+        IsSettingEnd = !isStart;
+    }
+    
+    private async Task OnMapClickedAsync(double longitude, double latitude)
+    {
+        if (_mapService == null) return;
+        
+        var coord = new Coordinate(latitude, longitude);
+        
+        if (IsSettingStart)
+        {
+            StartPoint = coord;
+            await _mapService.SetWaypointAsync(longitude, latitude, "start");
+            IsSettingStart = false;
+        }
+        else if (IsSettingEnd)
+        {
+            EndPoint = coord;
+            await _mapService.SetWaypointAsync(longitude, latitude, "end");
+            IsSettingEnd = false;
+        }
+        
+        await InvokeAsync(StateHasChanged);
+    }
+    
+    private async Task GetDirections()
+    {
+        if (_mapService == null || StartPoint == null || EndPoint == null) return;
+        
+        IsLoadingRoute = true;
+        StateHasChanged();
+        
+        try
+        {
+        CurrentRoute = await _mapService.GetDirectionsAsync(StartPoint!, EndPoint!);
+            
+            if (CurrentRoute != null)
+            {
+                await _mapService.DrawRouteAsync(CurrentRoute);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting directions: {ex.Message}");
+        }
+        finally
+        {
+            IsLoadingRoute = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task StartSimulation()
+    {
+        if (CurrentRoute == null || _mapService == null) return;
+        
+        SimulationState = SimulationStatus.Running;
+        SimulationProgress = 0;
+        SequenceNumber = 0;
+        SimulationStartTime = DateTime.UtcNow;
+        _isPaused = false;
+        
+        // Position marker at start
+        if (CurrentRoute.Coordinates.Count > 0)
+        {
+            var start = CurrentRoute.Coordinates[0];
+            CurrentPosition = new Coordinate(start[1], start[0]);
+            await _mapService.SetMarkerAsync(start[0], start[1], 0);
+        }
+        
+        // Start simulation loop
+        _simulationCts = new CancellationTokenSource();
+        _simulationTask = RunSimulationLoopAsync(_simulationCts.Token);
+        
+        StateHasChanged();
+    }
+    
+    private async Task RunSimulationLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Settings.IntervalMs));
+            
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (_isPaused)
+                {
+                    continue;
+                }
+                
+                await SimulationTickAsync();
+                
+                if (SimulationProgress >= 1.0)
+                {
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when simulation is stopped
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Simulation loop error: {ex.Message}");
+        }
+    }
+    
+    private void PauseSimulation()
+    {
+        SimulationState = SimulationStatus.Paused;
+        _isPaused = true;
+        StateHasChanged();
+    }
+    
+    private void ResumeSimulation()
+    {
+        SimulationState = SimulationStatus.Running;
+        _isPaused = false;
+        // Adjust start time to account for paused duration
+        StateHasChanged();
+    }
+    
+    private async Task StopSimulation()
+    {
+        SimulationState = SimulationStatus.Idle;
+        _simulationCts?.Cancel();
+        
+        if (_simulationTask != null)
+        {
+            try
+            {
+                await _simulationTask;
+            }
+            catch
+            {
+                // Ignore cancellation exceptions
+            }
+        }
+        
+        _simulationCts?.Dispose();
+        _simulationCts = null;
+        _simulationTask = null;
+        
+        SimulationProgress = 0;
+        SequenceNumber = 0;
+        CurrentPosition = null;
+        
+        if (_mapService != null)
+        {
+            await _mapService.RemoveMarkerAsync();
+        }
+        
+        StateHasChanged();
+    }
+    
+    private async Task SimulationTickAsync()
+    {
+        if (CurrentRoute == null || _mapService == null) return;
+        
+        try
+        {
+            // Calculate progress based on elapsed time and specified speed in MPH
+            var elapsedSeconds = (DateTime.UtcNow - SimulationStartTime).TotalSeconds;
+            
+            // Convert MPH to meters per second (1 mile = 1609.344 meters)
+            var speedMetersPerSecond = Settings.SpeedMph * 1609.344 / 3600.0;
+            
+            // Calculate distance traveled based on speed and elapsed time
+            var distanceTraveled = speedMetersPerSecond * elapsedSeconds;
+            
+            // Calculate progress as fraction of total route distance
+            var routeDistanceMeters = CurrentRoute.DistanceMeters;
+            SimulationProgress = Math.Min(1.0, distanceTraveled / routeDistanceMeters);
+            
+            // Interpolate position using JavaScript
+            var interpolated = await _mapService.InterpolatePositionAsync(CurrentRoute, SimulationProgress);
+            
+            if (interpolated != null && interpolated.Position.Length >= 2)
+            {
+                var lng = interpolated.Position[0];
+                var lat = interpolated.Position[1];
+                CurrentPosition = new Coordinate(lat, lng);
+                
+                // Animate marker to new position with smooth transition
+                // Duration matches the update interval for continuous movement
+                await _mapService.AnimateMarkerAsync(lng, lat, interpolated.Bearing, Settings.IntervalMs);
+                
+                // Send GPS data to webhook (fire and forget to not block the UI)
+                _ = SendGpsDataAsync(lat, lng, interpolated.Bearing);
+                
+                SequenceNumber++;
+            }
+            
+            // Check if simulation is complete
+            if (SimulationProgress >= 1.0)
+            {
+                SimulationState = SimulationStatus.Completed;
+            }
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Simulation tick error: {ex.Message}");
+        }
+    }
+    
+    private async Task SendGpsDataAsync(double latitude, double longitude, double bearing)
+    {
+        try
+        {
+            // Convert MPH to meters per second for the payload
+            var speedMetersPerSecond = Settings.SpeedMph * 1609.344 / 3600.0;
+            
+            var payload = new GpsPayload
+            {
+                DeviceId = Settings.DeviceId,
+                Latitude = latitude,
+                Longitude = longitude,
+                Altitude = 0,
+                Speed = speedMetersPerSecond,
+                Bearing = bearing,
+                Accuracy = 5.0,
+                Timestamp = DateTime.UtcNow,
+                SequenceNumber = SequenceNumber
+            };
+            
+            // Build URL with optional webhook URL and headers
+            var queryParams = new List<string>();
+            
+            if (!string.IsNullOrEmpty(Settings.WebhookUrl))
+            {
+                queryParams.Add($"webhookUrl={Uri.EscapeDataString(Settings.WebhookUrl)}");
+            }
+            
+            if (!string.IsNullOrEmpty(Settings.WebhookHeaders))
+            {
+                queryParams.Add($"webhookHeaders={Uri.EscapeDataString(Settings.WebhookHeaders)}");
+            }
+            
+            var url = queryParams.Count > 0 
+                ? $"api/webhook/broadcast?{string.Join("&", queryParams)}" 
+                : "api/webhook/broadcast";
+            
+            await Http.PostAsJsonAsync(url, payload);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending GPS data: {ex.Message}");
+        }
+    }
+    
+    private async Task ClearAll()
+    {
+        if (_mapService == null) return;
+        
+        await StopSimulation();
+        
+        StartPoint = null;
+        EndPoint = null;
+        CurrentRoute = null;
+        
+        await _mapService.ClearRouteAsync();
+        await _mapService.ClearWaypointsAsync();
+        await _mapService.RemoveMarkerAsync();
+        
+        StateHasChanged();
+    }
+    
+    private string GetStatusClass() => SimulationState switch
+    {
+        SimulationStatus.Idle => "status-idle",
+        SimulationStatus.Running => "status-running",
+        SimulationStatus.Paused => "status-paused",
+        SimulationStatus.Completed => "status-completed",
+        _ => "status-idle"
+    };
+    
+    public async ValueTask DisposeAsync()
+    {
+        _simulationCts?.Cancel();
+        _simulationCts?.Dispose();
+        
+        if (_simulationTask != null)
+        {
+            try
+            {
+                await _simulationTask;
+            }
+            catch
+            {
+                // Ignore
+            }
+        }
+        
+        if (_mapService != null)
+        {
+            _mapService.OnMapClicked -= OnMapClickedAsync;
+            await _mapService.DisposeAsync();
+        }
+    }
+    
+    private record MapboxConfig(string AccessToken);
+    
+    private enum SimulationStatus
+    {
+        Idle,
+        Running,
+        Paused,
+        Completed
+    }
+}
