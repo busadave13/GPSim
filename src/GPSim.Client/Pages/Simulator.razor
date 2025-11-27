@@ -29,11 +29,14 @@
                     @if (SimulationMode == Mode.Moving && SimulationProgress > 0)
                     {
                         <div><strong>Progress:</strong> @((SimulationProgress * 100).ToString("F1"))%</div>
-                        @if (MatchSpeedLimits && CurrentSpeedLimit.HasValue)
+                        @if (CurrentSpeedLimit.HasValue)
                         {
                             <div><strong>Speed Limit:</strong> @CurrentSpeedLimit MPH</div>
                         }
-                        <div><strong>Current Speed:</strong> @GetCurrentSpeed().ToString("F0") MPH</div>
+                        else
+                        {
+                            <div><strong>Speed:</strong> @Settings.SpeedMph.ToString("F0") MPH <span class="text-warning">(fallback)</span></div>
+                        }
                     }
                     <div><strong>Updates:</strong> @SequenceNumber</div>
                     <div><strong>Zoom:</strong> @CurrentZoomLevel.ToString("F1")</div>
@@ -70,15 +73,11 @@
                     max="10000" step="100" />
             </div>
 
-            <div class="mb-2 form-check">
-                <input type="checkbox" class="form-check-input" id="matchSpeedLimits" @bind="MatchSpeedLimits" />
-                <label class="form-check-label" for="matchSpeedLimits">Match Speed Limits</label>
-            </div>
-
             <div class="mb-2">
-                <label class="form-label">Speed (MPH) @(MatchSpeedLimits ? "(fallback)" : "")</label>
+                <label class="form-label">Fallback Speed (MPH)</label>
                 <input type="number" class="form-control form-control-sm" @bind="Settings.SpeedMph" min="1" max="200"
-                    step="1" disabled="@MatchSpeedLimits" />
+                    step="1" />
+                <small class="text-muted">Used when road speed limit is unavailable</small>
             </div>
 
             <div class="mb-2">
@@ -132,7 +131,7 @@
     private SimulationSettings Settings = new()
     {
         IntervalMs = 100,
-        SpeedMph = 30.0,
+        SpeedMph = 25.0,
         DeviceId = $"sim-{Guid.NewGuid().ToString()[..8]}",
         WebhookUrl = null
     };
@@ -145,14 +144,11 @@
     private DateTime LastTickTime;
 
     // Speed limit tracking
-    private bool MatchSpeedLimits = false;
     private int? CurrentSpeedLimit = null;
     private int CurrentSegmentIndex = 0;
     
     // Map state tracking
     private double CurrentZoomLevel = 12.0;
-    
-    private const double DefaultSpeedMph = 25.0;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -327,9 +323,15 @@
 
                     // Update speed limit from current segment
                     CurrentSegmentIndex = interpolated.SegmentIndex;
-                    if (MatchSpeedLimits && CurrentRoute.SpeedLimits.Count > CurrentSegmentIndex)
+                    if (CurrentRoute.SpeedLimits.Count > CurrentSegmentIndex)
                     {
-                        CurrentSpeedLimit = CurrentRoute.SpeedLimits[CurrentSegmentIndex];
+                        var segmentSpeedLimit = CurrentRoute.SpeedLimits[CurrentSegmentIndex];
+                        // Only set if the speed limit is valid (non-null, non-zero)
+                        CurrentSpeedLimit = segmentSpeedLimit > 0 ? segmentSpeedLimit : null;
+                    }
+                    else
+                    {
+                        CurrentSpeedLimit = null;
                     }
 
                     // Animate marker
@@ -448,25 +450,17 @@
     };
 
     /// <summary>
-    /// Gets the current speed based on settings and speed limit mode
+    /// Gets the current speed - uses road speed limit if available, otherwise fallback speed
     /// </summary>
     private double GetCurrentSpeed()
     {
-        if (!MatchSpeedLimits)
-        {
-            // When Match Speed Limits is OFF, use the default 25 MPH
-            return DefaultSpeedMph;
-        }
-
-        // When Match Speed Limits is ON:
-        // - Use the current road's speed limit if available
-        // - Otherwise, keep the current/previous speed (fallback)
+        // Use the road's speed limit if available
         if (CurrentSpeedLimit.HasValue)
         {
             return CurrentSpeedLimit.Value;
         }
 
-        // Fallback to configured speed when speed limit is unknown
+        // Fallback to configured speed (default 30 MPH) when speed limit is unknown
         return Settings.SpeedMph;
     }
 
