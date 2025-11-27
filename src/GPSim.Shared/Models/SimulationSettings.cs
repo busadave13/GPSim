@@ -11,9 +11,9 @@ public class SimulationSettings
     public int IntervalMs { get; set; } = 1000;
 
     /// <summary>
-    /// Speed multiplier for simulation (1.0 = real-time)
+    /// Simulation speed in miles per hour
     /// </summary>
-    public double SpeedMultiplier { get; set; } = 1.0;
+    public double SpeedMph { get; set; } = 30.0;
 
     /// <summary>
     /// Device identifier for GPS payloads

@@ -67,12 +67,11 @@
             </div>
             
             <div class="mb-2">
-                <label class="form-label">Speed Multiplier</label>
-                <input type="range" class="form-range" 
-                       @bind="Settings.SpeedMultiplier" 
-                       min="0.1" max="10" step="0.1"
+                <label class="form-label">Speed (MPH)</label>
+                <input type="number" class="form-control form-control-sm" 
+                       @bind="Settings.SpeedMph" 
+                       min="1" max="200" step="1"
                        disabled="@(SimulationState != SimulationStatus.Idle)" />
-                <small class="text-muted">@Settings.SpeedMultiplier.ToString("F1")x</small>
             </div>
             
             <div class="mb-2">
@@ -161,7 +160,7 @@
     private SimulationSettings Settings = new()
     {
         IntervalMs = 1000,
-        SpeedMultiplier = 1.0,
+        SpeedMph = 30.0,
         DeviceId = $"sim-{Guid.NewGuid().ToString()[..8]}",
         WebhookUrl = null
     };
@@ -369,10 +368,18 @@
         
         try
         {
-            // Calculate progress based on time and speed
+            // Calculate progress based on elapsed time and specified speed in MPH
             var elapsedSeconds = (DateTime.UtcNow - SimulationStartTime).TotalSeconds;
-            var routeDuration = CurrentRoute.DurationSeconds;
-            SimulationProgress = Math.Min(1.0, (elapsedSeconds * Settings.SpeedMultiplier) / routeDuration);
+            
+            // Convert MPH to meters per second (1 mile = 1609.344 meters)
+            var speedMetersPerSecond = Settings.SpeedMph * 1609.344 / 3600.0;
+            
+            // Calculate distance traveled based on speed and elapsed time
+            var distanceTraveled = speedMetersPerSecond * elapsedSeconds;
+            
+            // Calculate progress as fraction of total route distance
+            var routeDistanceMeters = CurrentRoute.DistanceMeters;
+            SimulationProgress = Math.Min(1.0, distanceTraveled / routeDistanceMeters);
             
             // Interpolate position using JavaScript
             var interpolated = await _mapService.InterpolatePositionAsync(CurrentRoute, SimulationProgress);
@@ -410,13 +417,16 @@
     {
         try
         {
+            // Convert MPH to meters per second for the payload
+            var speedMetersPerSecond = Settings.SpeedMph * 1609.344 / 3600.0;
+            
             var payload = new GpsPayload
             {
                 DeviceId = Settings.DeviceId,
                 Latitude = latitude,
                 Longitude = longitude,
                 Altitude = 0,
-                Speed = CurrentRoute?.DistanceMeters / CurrentRoute?.DurationSeconds ?? 0,
+                Speed = speedMetersPerSecond,
                 Bearing = bearing,
                 Accuracy = 5.0,
                 Timestamp = DateTime.UtcNow,
