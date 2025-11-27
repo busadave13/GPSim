@@ -56,7 +56,8 @@ public class MapboxInteropService : IAsyncDisposable
             Type = "LineString",
             Coordinates = result.Coordinates.ToList(),
             DistanceMeters = result.Distance,
-            DurationSeconds = result.Duration
+            DurationSeconds = result.Duration,
+            SpeedLimits = result.SpeedLimits?.ToList() ?? new List<int?>()
         };
     }
 
@@ -242,6 +243,11 @@ public record DirectionsResult
     public double[][] Coordinates { get; init; } = Array.Empty<double[]>();
     public double Distance { get; init; }
     public double Duration { get; init; }
+
+    /// <summary>
+    /// Speed limits for each segment in mph (null means unknown)
+    /// </summary>
+    public int?[]? SpeedLimits { get; init; }
 }
 
 /// <summary>
@@ -251,6 +257,11 @@ public record InterpolatedPosition
 {
     public double[] Position { get; init; } = Array.Empty<double>();
     public double Bearing { get; init; }
+
+    /// <summary>
+    /// Current segment index for speed limit lookup
+    /// </summary>
+    public int SegmentIndex { get; init; }
 }
 
 /// <summary>

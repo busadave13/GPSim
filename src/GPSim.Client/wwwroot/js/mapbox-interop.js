@@ -104,9 +104,11 @@ window.mapboxInterop = {
 
     /**
      * Get directions between two points using Mapbox Directions API
+     * Includes speed limit annotations for each route segment
      */
     getDirections: async function (accessToken, origin, destination, profile = 'driving') {
-        const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${origin[0]},${origin[1]};${destination[0]},${destination[1]}?geometries=geojson&overview=full&access_token=${accessToken}`;
+        // Request maxspeed annotations along with the route
+        const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${origin[0]},${origin[1]};${destination[0]},${destination[1]}?geometries=geojson&overview=full&annotations=maxspeed&access_token=${accessToken}`;
 
         try {
             const response = await fetch(url);
@@ -114,11 +116,36 @@ window.mapboxInterop = {
 
             if (data.routes && data.routes.length > 0) {
                 const route = data.routes[0];
+                
+                // Parse speed limits from annotations
+                let speedLimits = [];
+                if (route.legs && route.legs.length > 0) {
+                    for (const leg of route.legs) {
+                        if (leg.annotation && leg.annotation.maxspeed) {
+                            for (const speedData of leg.annotation.maxspeed) {
+                                // Convert to mph - Mapbox returns either speed+unit or "unknown":true or "none":true
+                                let speedMph = null;
+                                if (speedData.speed !== undefined) {
+                                    if (speedData.unit === 'km/h') {
+                                        speedMph = Math.round(speedData.speed * 0.621371);
+                                    } else if (speedData.unit === 'mph') {
+                                        speedMph = speedData.speed;
+                                    }
+                                }
+                                speedLimits.push(speedMph); // null means unknown
+                            }
+                        }
+                    }
+                }
+                
+                console.log('Route fetched with', speedLimits.length, 'speed limit segments');
+                
                 return {
                     coordinates: route.geometry.coordinates,
                     distance: route.distance,
                     duration: route.duration,
-                    geometry: route.geometry
+                    geometry: route.geometry,
+                    speedLimits: speedLimits
                 };
             }
             return null;
@@ -415,16 +442,18 @@ window.mapboxInterop = {
 
     /**
      * Interpolate a position along the route at a given fraction
+     * Returns position, bearing, and segment index for speed limit lookup
      */
     interpolatePosition: function (coordinates, fraction) {
         if (!coordinates || coordinates.length < 2) return null;
-        if (fraction <= 0) return { position: coordinates[0], bearing: 0 };
+        if (fraction <= 0) return { position: coordinates[0], bearing: 0, segmentIndex: 0 };
         if (fraction >= 1) return {
             position: coordinates[coordinates.length - 1],
             bearing: this.calculateBearing(
                 coordinates[coordinates.length - 2],
                 coordinates[coordinates.length - 1]
-            )
+            ),
+            segmentIndex: coordinates.length - 2
         };
 
         // Calculate total distance
@@ -451,14 +480,15 @@ window.mapboxInterop = {
                 const lat = start[1] + (end[1] - start[1]) * segmentFraction;
                 const bearing = this.calculateBearing(start, end);
 
-                return { position: [lng, lat], bearing: bearing };
+                return { position: [lng, lat], bearing: bearing, segmentIndex: i };
             }
             accumulatedDistance += distances[i];
         }
 
         return {
             position: coordinates[coordinates.length - 1],
-            bearing: 0
+            bearing: 0,
+            segmentIndex: coordinates.length - 2
         };
     },
 

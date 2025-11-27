@@ -29,6 +29,11 @@
                     @if (SimulationMode == Mode.Moving && SimulationProgress > 0)
                     {
                         <div><strong>Progress:</strong> @((SimulationProgress * 100).ToString("F1"))%</div>
+                        @if (MatchSpeedLimits && CurrentSpeedLimit.HasValue)
+                        {
+                            <div><strong>Speed Limit:</strong> @CurrentSpeedLimit MPH</div>
+                        }
+                        <div><strong>Current Speed:</strong> @GetCurrentSpeed().ToString("F0") MPH</div>
                     }
                     <div><strong>Updates:</strong> @SequenceNumber</div>
                 </div>
@@ -65,11 +70,18 @@
                        min="100" max="10000" step="100" />
             </div>
             
+            <div class="mb-2 form-check">
+                <input type="checkbox" class="form-check-input" id="matchSpeedLimits"
+                       @bind="MatchSpeedLimits" />
+                <label class="form-check-label" for="matchSpeedLimits">Match Speed Limits</label>
+            </div>
+            
             <div class="mb-2">
-                <label class="form-label">Speed (MPH)</label>
+                <label class="form-label">Speed (MPH) @(MatchSpeedLimits ? "(fallback)" : "")</label>
                 <input type="number" class="form-control form-control-sm" 
                        @bind="Settings.SpeedMph" 
-                       min="1" max="200" step="1" />
+                       min="1" max="200" step="1"
+                       disabled="@MatchSpeedLimits" />
             </div>
             
             <div class="mb-2">
@@ -135,6 +147,15 @@
     private double SimulationProgress = 0;
     private int SequenceNumber = 0;
     private DateTime RouteStartTime;
+    private double DistanceTraveledMeters = 0;
+    private DateTime LastTickTime;
+    
+    // Speed limit tracking
+    private bool MatchSpeedLimits = false;
+    private int? CurrentSpeedLimit = null;
+    private int CurrentSegmentIndex = 0;
+    
+    private const double DefaultSpeedMph = 25.0;
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -219,10 +240,17 @@
                 CurrentRoute = route;
                 await _mapService.DrawRouteAsync(route);
                 
-                // Start moving
+                // Start moving - reset all tracking variables
                 SimulationMode = Mode.Moving;
                 SimulationProgress = 0;
+                DistanceTraveledMeters = 0;
+                CurrentSegmentIndex = 0;
+                CurrentSpeedLimit = null;
                 RouteStartTime = DateTime.UtcNow;
+                LastTickTime = DateTime.UtcNow;
+                
+                // Log speed limit availability
+                Console.WriteLine($"Route has {route.SpeedLimits.Count} speed limit segments");
             }
             
             await InvokeAsync(StateHasChanged);
@@ -268,14 +296,21 @@
         {
             if (SimulationMode == Mode.Moving && CurrentRoute != null)
             {
-                // Calculate progress based on elapsed time and speed
-                var elapsedSeconds = (DateTime.UtcNow - RouteStartTime).TotalSeconds;
-                var speedMetersPerSecond = Settings.SpeedMph * 1609.344 / 3600.0;
-                var distanceTraveled = speedMetersPerSecond * elapsedSeconds;
+                // Calculate time since last tick
+                var now = DateTime.UtcNow;
+                var tickDeltaSeconds = (now - LastTickTime).TotalSeconds;
+                LastTickTime = now;
+                
+                // Get current speed (based on speed limit mode)
+                var currentSpeedMph = GetCurrentSpeed();
+                var speedMetersPerSecond = currentSpeedMph * 1609.344 / 3600.0;
+                
+                // Accumulate distance traveled
+                DistanceTraveledMeters += speedMetersPerSecond * tickDeltaSeconds;
                 
                 // Calculate progress as fraction of total route distance
                 var routeDistanceMeters = CurrentRoute.DistanceMeters;
-                SimulationProgress = Math.Min(1.0, distanceTraveled / routeDistanceMeters);
+                SimulationProgress = Math.Min(1.0, DistanceTraveledMeters / routeDistanceMeters);
                 
                 // Interpolate position
                 var interpolated = await _mapService.InterpolatePositionAsync(CurrentRoute, SimulationProgress);
@@ -286,11 +321,18 @@
                     var lat = interpolated.Position[1];
                     CurrentPosition = new Coordinate(lat, lng);
                     
+                    // Update speed limit from current segment
+                    CurrentSegmentIndex = interpolated.SegmentIndex;
+                    if (MatchSpeedLimits && CurrentRoute.SpeedLimits.Count > CurrentSegmentIndex)
+                    {
+                        CurrentSpeedLimit = CurrentRoute.SpeedLimits[CurrentSegmentIndex];
+                    }
+                    
                     // Animate marker
                     await _mapService.AnimateMarkerAsync(lng, lat, interpolated.Bearing, Settings.IntervalMs);
                     
-                    // Send GPS data
-                    _ = SendGpsDataAsync(lat, lng, interpolated.Bearing);
+                    // Send GPS data with actual current speed
+                    _ = SendGpsDataAsync(lat, lng, interpolated.Bearing, currentSpeedMph);
                     SequenceNumber++;
                 }
                 
@@ -303,7 +345,7 @@
             else if (SimulationMode == Mode.Stationary)
             {
                 // When stationary, just keep sending current position
-                _ = SendGpsDataAsync(CurrentPosition.Latitude, CurrentPosition.Longitude, 0);
+                _ = SendGpsDataAsync(CurrentPosition.Latitude, CurrentPosition.Longitude, 0, 0);
                 SequenceNumber++;
             }
             
@@ -341,13 +383,12 @@
         SimulationProgress = 0;
     }
     
-    private async Task SendGpsDataAsync(double latitude, double longitude, double bearing)
+    private async Task SendGpsDataAsync(double latitude, double longitude, double bearing, double speedMph = 0)
     {
         try
         {
-            var speedMetersPerSecond = SimulationMode == Mode.Moving 
-                ? Settings.SpeedMph * 1609.344 / 3600.0 
-                : 0;
+            // Convert MPH to m/s
+            var speedMetersPerSecond = speedMph * 1609.344 / 3600.0;
             
             var payload = new GpsPayload
             {
@@ -401,6 +442,29 @@
         Mode.Moving => "Moving to destination",
         _ => "Unknown"
     };
+    
+    /// <summary>
+    /// Gets the current speed based on settings and speed limit mode
+    /// </summary>
+    private double GetCurrentSpeed()
+    {
+        if (!MatchSpeedLimits)
+        {
+            // When Match Speed Limits is OFF, use the default 25 MPH
+            return DefaultSpeedMph;
+        }
+        
+        // When Match Speed Limits is ON:
+        // - Use the current road's speed limit if available
+        // - Otherwise, keep the current/previous speed (fallback)
+        if (CurrentSpeedLimit.HasValue)
+        {
+            return CurrentSpeedLimit.Value;
+        }
+        
+        // Fallback to configured speed when speed limit is unknown
+        return Settings.SpeedMph;
+    }
     
     public async ValueTask DisposeAsync()
     {
