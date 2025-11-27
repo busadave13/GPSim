@@ -159,7 +159,7 @@
     // Simulation state
     private SimulationSettings Settings = new()
     {
-        IntervalMs = 1000,
+        IntervalMs = 100,
         SpeedMph = 30.0,
         DeviceId = $"sim-{Guid.NewGuid().ToString()[..8]}",
         WebhookUrl = null
@@ -390,8 +390,9 @@
                 var lat = interpolated.Position[1];
                 CurrentPosition = new Coordinate(lat, lng);
                 
-                // Update marker position directly (not animated, for reliability)
-                await _mapService.SetMarkerAsync(lng, lat, interpolated.Bearing);
+                // Animate marker to new position with smooth transition
+                // Duration matches the update interval for continuous movement
+                await _mapService.AnimateMarkerAsync(lng, lat, interpolated.Bearing, Settings.IntervalMs);
                 
                 // Send GPS data to webhook (fire and forget to not block the UI)
                 _ = SendGpsDataAsync(lat, lng, interpolated.Bearing);
