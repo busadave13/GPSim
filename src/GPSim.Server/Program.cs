@@ -1,6 +1,10 @@
+using DotNetEnv;
 using GPSim.Server.Configuration;
 using GPSim.Server.Services;
 using Microsoft.AspNetCore.Components.WebAssembly.Server;
+
+// Load environment variables from .env file (if exists)
+Env.TraversePath().Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
