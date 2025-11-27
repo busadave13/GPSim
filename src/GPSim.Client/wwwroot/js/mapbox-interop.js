@@ -2,6 +2,7 @@
 window.mapboxInterop = {
     map: null,
     marker: null,
+    homeMarker: null,
     routeLine: null,
     directionsLayer: null,
 
@@ -51,11 +52,17 @@ window.mapboxInterop = {
                         navigator.geolocation.getCurrentPosition(
                             (position) => {
                                 console.log('Got user location:', position.coords.latitude, position.coords.longitude);
+                                const lng = position.coords.longitude;
+                                const lat = position.coords.latitude;
+                                
                                 this.map.flyTo({
-                                    center: [position.coords.longitude, position.coords.latitude],
-                                    zoom: 12,
+                                    center: [lng, lat],
+                                    zoom: 14,
                                     essential: true
                                 });
+                                
+                                // Place home marker at user's location
+                                this.setHomeMarker(lng, lat);
                             },
                             (error) => {
                                 console.warn('Geolocation error:', error.message);
@@ -322,6 +329,52 @@ window.mapboxInterop = {
         if (this['waypoint-end']) {
             this['waypoint-end'].remove();
             this['waypoint-end'] = null;
+        }
+    },
+
+    /**
+     * Set home marker at user's current location
+     */
+    setHomeMarker: function (lng, lat) {
+        // Remove existing home marker if any
+        if (this.homeMarker) {
+            this.homeMarker.remove();
+        }
+
+        const el = document.createElement('div');
+        el.className = 'home-marker';
+        el.innerHTML = `
+            <div style="
+                width: 36px;
+                height: 36px;
+                background-color: #8b5cf6;
+                border: 3px solid white;
+                border-radius: 50%;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 18px;
+            ">🏠</div>
+        `;
+
+        this.homeMarker = new mapboxgl.Marker({
+            element: el,
+            anchor: 'center'
+        })
+            .setLngLat([lng, lat])
+            .addTo(this.map);
+        
+        console.log('Home marker placed at:', lat, lng);
+    },
+
+    /**
+     * Remove home marker from the map
+     */
+    removeHomeMarker: function () {
+        if (this.homeMarker) {
+            this.homeMarker.remove();
+            this.homeMarker = null;
         }
     },
 
