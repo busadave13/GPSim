@@ -30,17 +30,45 @@ window.mapboxInterop = {
             this.map.addControl(new mapboxgl.NavigationControl());
 
             // Add geolocate control
-            this.map.addControl(new mapboxgl.GeolocateControl({
+            const geolocateControl = new mapboxgl.GeolocateControl({
                 positionOptions: {
                     enableHighAccuracy: true
                 },
                 trackUserLocation: false,
                 showUserHeading: false
-            }));
+            });
+            this.map.addControl(geolocateControl);
+
+            // Store reference for later use
+            this.geolocateControl = geolocateControl;
 
             return new Promise((resolve, reject) => {
                 this.map.on('load', () => {
                     console.log('Mapbox map loaded successfully');
+                    
+                    // Try to get user's location and center the map
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            (position) => {
+                                console.log('Got user location:', position.coords.latitude, position.coords.longitude);
+                                this.map.flyTo({
+                                    center: [position.coords.longitude, position.coords.latitude],
+                                    zoom: 12,
+                                    essential: true
+                                });
+                            },
+                            (error) => {
+                                console.warn('Geolocation error:', error.message);
+                                // Keep default location (San Francisco) if geolocation fails
+                            },
+                            {
+                                enableHighAccuracy: true,
+                                timeout: 10000,
+                                maximumAge: 0
+                            }
+                        );
+                    }
+                    
                     resolve(true);
                 });
                 this.map.on('error', (e) => {
