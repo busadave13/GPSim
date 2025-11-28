@@ -32,8 +32,8 @@ public class WebhookController : ControllerBase
         [FromQuery] string? webhookHeaders = null,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Received GPS broadcast request: Lat={Lat}, Lng={Lng}, Seq={Seq}",
-            payload.Latitude, payload.Longitude, payload.SequenceNumber);
+        _logger.LogDebug("Received GPS broadcast request: Lat={Lat}, Lng={Lng}",
+            payload.Latitude, payload.Longitude);
 
         var success = await _webhookService.ForwardAsync(payload, webhookUrl, webhookHeaders, cancellationToken);
 

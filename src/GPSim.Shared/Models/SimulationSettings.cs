@@ -16,11 +16,6 @@ public class SimulationSettings
     public double SpeedMph { get; set; } = 30.0;
 
     /// <summary>
-    /// Device identifier for GPS payloads
-    /// </summary>
-    public string DeviceId { get; set; } = "simulator";
-
-    /// <summary>
     /// Optional webhook URL override
     /// </summary>
     public string? WebhookUrl { get; set; }

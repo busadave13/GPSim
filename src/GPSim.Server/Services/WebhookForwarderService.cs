@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 namespace GPSim.Server.Services;
 
 /// <summary>
-/// Implementation of webhook forwarding service with retry logic
+/// Implementation of webhook forwarding service
 /// </summary>
 public class WebhookForwarderService : IWebhookForwarderService
 {
@@ -37,61 +37,42 @@ public class WebhookForwarderService : IWebhookForwarderService
         // Parse custom headers if provided
         var customHeaders = ParseHeaders(webhookHeaders);
 
-        var retryCount = 0;
-        var maxRetries = _settings.RetryCount;
-
-        while (retryCount <= maxRetries)
+        try
         {
-            try
+            _logger.LogDebug("Forwarding GPS payload to {WebhookUrl}", webhookUrl);
+
+            // Create request with custom headers
+            using var request = new HttpRequestMessage(HttpMethod.Post, webhookUrl);
+            request.Content = JsonContent.Create(payload);
+            
+            // Add custom headers if provided
+            foreach (var header in customHeaders)
             {
-                _logger.LogDebug("Forwarding GPS payload to {WebhookUrl} (attempt {Attempt}/{MaxRetries})",
-                    webhookUrl, retryCount + 1, maxRetries + 1);
-
-                // Create request with custom headers
-                using var request = new HttpRequestMessage(HttpMethod.Post, webhookUrl);
-                request.Content = JsonContent.Create(payload);
-                
-                // Add custom headers if provided
-                foreach (var header in customHeaders)
-                {
-                    request.Headers.TryAddWithoutValidation(header.Key, header.Value);
-                }
-
-                var response = await _httpClient.SendAsync(request, cancellationToken);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    _logger.LogInformation("Successfully forwarded GPS payload. Lat: {Lat}, Lng: {Lng}, Seq: {Seq}",
-                        payload.Latitude, payload.Longitude, payload.SequenceNumber);
-                    return true;
-                }
-
-                _logger.LogWarning("Webhook returned non-success status: {StatusCode}", response.StatusCode);
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogWarning(ex, "Failed to forward GPS payload (attempt {Attempt}/{MaxRetries})",
-                    retryCount + 1, maxRetries + 1);
-            }
-            catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-            {
-                _logger.LogWarning(ex, "Webhook request timed out (attempt {Attempt}/{MaxRetries})",
-                    retryCount + 1, maxRetries + 1);
+                request.Headers.TryAddWithoutValidation(header.Key, header.Value);
             }
 
-            retryCount++;
+            var response = await _httpClient.SendAsync(request, cancellationToken);
 
-            if (retryCount <= maxRetries)
+            if (response.IsSuccessStatusCode)
             {
-                // Exponential backoff: 1s, 2s, 4s...
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, retryCount - 1));
-                _logger.LogDebug("Waiting {Delay}s before retry", delay.TotalSeconds);
-                await Task.Delay(delay, cancellationToken);
+                _logger.LogInformation("Successfully forwarded GPS payload. Lat: {Lat}, Lng: {Lng}",
+                    payload.Latitude, payload.Longitude);
+                return true;
             }
+
+            _logger.LogWarning("Webhook returned non-success status: {StatusCode}", response.StatusCode);
+            return false;
         }
-
-        _logger.LogError("Failed to forward GPS payload after {MaxRetries} retries", maxRetries + 1);
-        return false;
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to forward GPS payload");
+            return false;
+        }
+        catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Webhook request timed out");
+            return false;
+        }
     }
 
     /// <summary>

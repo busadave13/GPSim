@@ -40,15 +40,13 @@ public class WebhookForwarderServiceTests
     {
         return new GpsPayload
         {
-            DeviceId = "test-device",
             Latitude = 37.7749,
             Longitude = -122.4194,
             Altitude = 0,
             Speed = 25.5,
             Bearing = 180.0,
             Accuracy = 5.0,
-            Timestamp = DateTime.UtcNow,
-            SequenceNumber = 1
+            Timestamp = DateTime.UtcNow
         };
     }
 
@@ -169,10 +167,9 @@ public class WebhookForwarderServiceTests
     }
 
     [Fact]
-    public async Task ForwardAsync_WithServerError_ReturnsFalseAfterRetries()
+    public async Task ForwardAsync_WithServerError_ReturnsFalse()
     {
         // Arrange
-        _settings.RetryCount = 1; // Reduce retries for faster test
         var callCount = 0;
 
         var handlerMock = new Mock<HttpMessageHandler>();
@@ -196,7 +193,7 @@ public class WebhookForwarderServiceTests
 
         // Assert
         result.Should().BeFalse();
-        callCount.Should().Be(2); // Initial + 1 retry
+        callCount.Should().Be(1); // Single attempt, no retries
     }
 
     [Fact]
