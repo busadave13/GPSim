@@ -35,7 +35,10 @@ public class WebhookForwarderService : IWebhookForwarderService
 
     public async Task<bool> ForwardAsync(GpsPayload payload, string? webhookUrlOverride = null, string? webhookHeaders = null, CancellationToken cancellationToken = default)
     {
-        var webhookUrl = webhookUrlOverride ?? _settings.DefaultUrl;
+        // Resolve webhook URL: parameter override > environment variable > appsettings
+        var webhookUrl = webhookUrlOverride 
+            ?? Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_URL")
+            ?? _settings.DefaultUrl;
         
         if (string.IsNullOrWhiteSpace(webhookUrl))
         {
@@ -43,8 +46,17 @@ public class WebhookForwarderService : IWebhookForwarderService
             return false;
         }
 
-        // Parse custom headers if provided
-        var customHeaders = ParseHeaders(webhookHeaders);
+        // Resolve default headers: environment variable > appsettings
+        var defaultHeaders = Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_HEADERS")
+            ?? _settings.DefaultHeaders;
+
+        // Parse headers: merge default headers with override headers (override takes precedence)
+        var customHeaders = ParseHeaders(defaultHeaders);
+        var overrideHeaders = ParseHeaders(webhookHeaders);
+        foreach (var header in overrideHeaders)
+        {
+            customHeaders[header.Key] = header.Value;
+        }
 
         // Create a custom activity/span for webhook forwarding
         using var activity = WebhookTelemetry.ActivitySource.StartActivity(

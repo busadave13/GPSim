@@ -29,10 +29,15 @@ builder.Services.AddHttpClient<IWebhookForwarderService, WebhookForwarderService
     client.Timeout = TimeSpan.FromSeconds(settings?.TimeoutSeconds ?? 30);
 });
 
-// Configure OpenTelemetry
-var serviceName = builder.Configuration.GetValue<string>("OpenTelemetry:ServiceName") ?? "GPSim.Server";
-var otlpEndpoint = builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint");
-var otlpProtocol = builder.Configuration.GetValue<string>("OpenTelemetry:Protocol") ?? "grpc";
+// Configure OpenTelemetry using standard OTEL environment variables with fallback to appsettings.json
+var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME")
+    ?? builder.Configuration.GetValue<string>("OpenTelemetry:ServiceName")
+    ?? "GPSim.Server";
+var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
+    ?? builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint");
+var otlpProtocol = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL")
+    ?? builder.Configuration.GetValue<string>("OpenTelemetry:Protocol")
+    ?? "grpc";
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource
@@ -57,7 +62,8 @@ builder.Services.AddOpenTelemetry()
             {
                 options.Endpoint = new Uri(otlpEndpoint);
                 // Use gRPC (default) or HTTP/protobuf based on configuration
-                options.Protocol = otlpProtocol.Equals("http", StringComparison.OrdinalIgnoreCase)
+                // Supports both "http" and standard "http/protobuf" values
+                options.Protocol = otlpProtocol.Contains("http", StringComparison.OrdinalIgnoreCase)
                     ? OtlpExportProtocol.HttpProtobuf
                     : OtlpExportProtocol.Grpc;
             });

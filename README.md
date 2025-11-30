@@ -65,7 +65,21 @@ docker compose up --build
 
 ## Configuration
 
-Update `src/GPSim.Server/appsettings.json` with your settings:
+GPSim can be configured via environment variables or `appsettings.json`. Environment variables take precedence.
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `MAPBOX_ACCESS_TOKEN` | Mapbox API access token (required) |
+| `GPSIM_WEBHOOK_URL` | Default webhook URL for GPS payload forwarding |
+| `GPSIM_WEBHOOK_HEADERS` | Default headers (format: `Header1:Value1;Header2:Value2`) |
+| `GPSIM_WEBHOOK_INTERVAL_MS` | Webhook send interval in milliseconds (default: 1000) |
+| `OTEL_SERVICE_NAME` | OpenTelemetry service name |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | Transport protocol (`grpc` or `http/protobuf`) |
+
+### appsettings.json
 
 ```json
 {
@@ -74,6 +88,8 @@ Update `src/GPSim.Server/appsettings.json` with your settings:
   },
   "Webhook": {
     "DefaultUrl": "https://your-webhook-endpoint.com/gps",
+    "DefaultHeaders": "Authorization:Bearer token",
+    "IntervalMs": 1000,
     "TimeoutSeconds": 30,
     "RetryCount": 3
   },
@@ -102,11 +118,13 @@ GPSim includes built-in OpenTelemetry support for distributed tracing. This prov
 
 ### Configuration
 
-| Setting | Description |
-|---------|-------------|
-| `OpenTelemetry:ServiceName` | Service name in traces (default: `GPSim.Server`) |
-| `OpenTelemetry:OtlpEndpoint` | OTLP collector endpoint (e.g., `http://localhost:4317` for gRPC) |
-| `OpenTelemetry:Protocol` | Transport protocol: `grpc` (default) or `http` |
+GPSim uses **standard OTEL environment variables** with fallback to appsettings.json:
+
+| Environment Variable | appsettings.json Fallback | Description |
+|---------------------|---------------------------|-------------|
+| `OTEL_SERVICE_NAME` | `OpenTelemetry:ServiceName` | Service name in traces (default: `GPSim.Server`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `OpenTelemetry:OtlpEndpoint` | OTLP collector endpoint (e.g., `http://localhost:4317`) |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `OpenTelemetry:Protocol` | Transport protocol: `grpc` (default) or `http/protobuf` |
 
 ### Docker with Jaeger
 
@@ -125,7 +143,9 @@ services:
   gpsim:
     # ... existing config ...
     environment:
-      - OpenTelemetry__OtlpEndpoint=http://jaeger:4317
+      - OTEL_SERVICE_NAME=GPSim.Server
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 ```
 
 Then view traces at `http://localhost:16686`.

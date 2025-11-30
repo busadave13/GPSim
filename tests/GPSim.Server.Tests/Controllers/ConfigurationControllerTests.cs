@@ -11,6 +11,9 @@ namespace GPSim.Server.Tests.Controllers;
 /// </summary>
 public class ConfigurationControllerTests
 {
+    private static IOptions<WebhookSettings> CreateDefaultWebhookOptions() =>
+        Options.Create(new WebhookSettings());
+
     [Fact]
     public void GetMapboxConfig_ReturnsOkWithAccessToken()
     {
@@ -21,7 +24,7 @@ public class ConfigurationControllerTests
             CircleRadiusMiles = 0.5
         };
         var options = Options.Create(settings);
-        var controller = new ConfigurationController(options);
+        var controller = new ConfigurationController(options, CreateDefaultWebhookOptions());
 
         // Act
         var result = controller.GetMapboxConfig();
@@ -43,7 +46,7 @@ public class ConfigurationControllerTests
             // CircleRadiusMiles not set, should use default
         };
         var options = Options.Create(settings);
-        var controller = new ConfigurationController(options);
+        var controller = new ConfigurationController(options, CreateDefaultWebhookOptions());
 
         // Act
         var result = controller.GetMapboxConfig();
@@ -64,7 +67,7 @@ public class ConfigurationControllerTests
             CircleRadiusMiles = 0.25
         };
         var options = Options.Create(settings);
-        var controller = new ConfigurationController(options);
+        var controller = new ConfigurationController(options, CreateDefaultWebhookOptions());
 
         // Act
         var result = controller.GetMapboxConfig();
@@ -86,7 +89,7 @@ public class ConfigurationControllerTests
             CircleRadiusMiles = 0.1 // 1/10th of a mile
         };
         var options = Options.Create(settings);
-        var controller = new ConfigurationController(options);
+        var controller = new ConfigurationController(options, CreateDefaultWebhookOptions());
 
         // Act
         var result = controller.GetMapboxConfig();
@@ -107,7 +110,7 @@ public class ConfigurationControllerTests
             CircleRadiusMiles = 5.0 // 5 miles
         };
         var options = Options.Create(settings);
-        var controller = new ConfigurationController(options);
+        var controller = new ConfigurationController(options, CreateDefaultWebhookOptions());
 
         // Act
         var result = controller.GetMapboxConfig();

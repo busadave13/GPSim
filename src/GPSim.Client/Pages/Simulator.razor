@@ -156,8 +156,8 @@
         IntervalMs = 100,
         WebhookIntervalMs = 1000,
         SpeedMph = 25.0,
-        WebhookUrl = "http://localhost:8080/api/location",
-        WebhookHeaders = "X-Mock-ID:location/200"
+        WebhookUrl = "",
+        WebhookHeaders = ""
     };
 
     // Simulation tracking
@@ -195,6 +195,15 @@
             {
                 _accessToken = config.AccessToken;
                 _circleRadiusMiles = config.CircleRadiusMiles;
+            }
+
+            // Get webhook configuration from server (resolved from env vars or appsettings)
+            var webhookConfig = await Http.GetFromJsonAsync<WebhookConfig>("api/configuration/webhook");
+            if (webhookConfig != null)
+            {
+                Settings.WebhookUrl = webhookConfig.DefaultUrl ?? "";
+                Settings.WebhookHeaders = webhookConfig.DefaultHeaders ?? "";
+                Settings.WebhookIntervalMs = webhookConfig.IntervalMs;
             }
 
             _mapService = new MapboxInteropService(JSRuntime);
@@ -572,6 +581,7 @@
     }
 
     private record MapboxConfig(string AccessToken, double CircleRadiusMiles = 0.1);
+    private record WebhookConfig(string DefaultUrl, string DefaultHeaders, int IntervalMs = 1000);
 
     private enum Mode
     {
