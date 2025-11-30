@@ -88,9 +88,17 @@
             <div class="section-title">Settings</div>
 
             <div class="mb-2">
-                <label class="form-label">Update Interval (ms)</label>
-                <input type="number" class="form-control form-control-sm" @bind="Settings.IntervalMs" min="100"
-                    max="10000" step="100" />
+                <label class="form-label">Update Interval: @Settings.IntervalMs ms</label>
+                <input type="range" class="form-range" @bind="Settings.IntervalMs" @bind:event="oninput" 
+                    min="50" max="500" step="10" />
+                <small class="text-muted">Controls animation smoothness</small>
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label">Webhook Interval (ms)</label>
+                <input type="number" class="form-control form-control-sm" @bind="Settings.WebhookIntervalMs" 
+                    min="100" max="60000" step="100" />
+                <small class="text-muted">How often GPS data is sent to webhook</small>
             </div>
 
             <div class="mb-2">
@@ -145,7 +153,8 @@
     // Simulation settings
     private SimulationSettings Settings = new()
     {
-        IntervalMs = 1000,
+        IntervalMs = 100,
+        WebhookIntervalMs = 1000,
         SpeedMph = 25.0,
         WebhookUrl = "http://localhost:8080/api/location",
         WebhookHeaders = "X-Mock-ID:location/200"
@@ -156,6 +165,7 @@
     private DateTime RouteStartTime;
     private double DistanceTraveledMeters = 0;
     private DateTime LastTickTime;
+    private DateTime LastWebhookSendTime = DateTime.MinValue;
 
     // Speed limit tracking
     private int? CurrentSpeedLimit = null;
@@ -422,6 +432,18 @@
     {
         try
         {
+            // Check if enough time has passed since last webhook send
+            var now = DateTime.UtcNow;
+            var timeSinceLastSend = (now - LastWebhookSendTime).TotalMilliseconds;
+            if (timeSinceLastSend < Settings.WebhookIntervalMs)
+            {
+                // Not enough time has passed, skip this webhook send
+                return;
+            }
+            
+            // Update last send time
+            LastWebhookSendTime = now;
+
             // Convert MPH to m/s
             var speedMetersPerSecond = speedMph * 1609.344 / 3600.0;
 
