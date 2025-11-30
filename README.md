@@ -76,9 +76,59 @@ Update `src/GPSim.Server/appsettings.json` with your settings:
     "DefaultUrl": "https://your-webhook-endpoint.com/gps",
     "TimeoutSeconds": 30,
     "RetryCount": 3
+  },
+  "OpenTelemetry": {
+    "ServiceName": "GPSim.Server",
+    "OtlpEndpoint": "http://localhost:4317",
+    "Protocol": "grpc"
   }
 }
 ```
+
+## OpenTelemetry
+
+GPSim includes built-in OpenTelemetry support for distributed tracing. This provides observability into webhook calls and API requests.
+
+### Features
+
+- **Automatic HTTP Tracing**: All incoming API requests and outgoing webhook calls are automatically traced
+- **Custom Webhook Spans**: Webhook forwarding includes detailed span attributes:
+  - `webhook.url` - Target webhook URL
+  - `gps.latitude` / `gps.longitude` - GPS coordinates
+  - `gps.speed` / `gps.bearing` - Movement data
+  - `http.status_code` - Response status
+  - `webhook.success` - Success/failure indicator
+- **Flexible Export**: Console exporter for development, OTLP for production
+
+### Configuration
+
+| Setting | Description |
+|---------|-------------|
+| `OpenTelemetry:ServiceName` | Service name in traces (default: `GPSim.Server`) |
+| `OpenTelemetry:OtlpEndpoint` | OTLP collector endpoint (e.g., `http://localhost:4317` for gRPC) |
+| `OpenTelemetry:Protocol` | Transport protocol: `grpc` (default) or `http` |
+
+### Docker with Jaeger
+
+To use OpenTelemetry with Jaeger, add to your `docker-compose.yml`:
+
+```yaml
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  gpsim:
+    # ... existing config ...
+    environment:
+      - OpenTelemetry__OtlpEndpoint=http://jaeger:4317
+```
+
+Then view traces at `http://localhost:16686`.
 
 ## Running the Application
 

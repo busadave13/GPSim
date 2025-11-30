@@ -1,9 +1,18 @@
+using System.Diagnostics;
 using System.Net.Http.Json;
 using GPSim.Server.Configuration;
 using GPSim.Shared.Models;
 using Microsoft.Extensions.Options;
 
 namespace GPSim.Server.Services;
+
+/// <summary>
+/// ActivitySource for webhook telemetry
+/// </summary>
+public static class WebhookTelemetry
+{
+    public static readonly ActivitySource ActivitySource = new("GPSim.Webhook", "1.0.0");
+}
 
 /// <summary>
 /// Implementation of webhook forwarding service
@@ -37,6 +46,19 @@ public class WebhookForwarderService : IWebhookForwarderService
         // Parse custom headers if provided
         var customHeaders = ParseHeaders(webhookHeaders);
 
+        // Create a custom activity/span for webhook forwarding
+        using var activity = WebhookTelemetry.ActivitySource.StartActivity(
+            "webhook.forward",
+            ActivityKind.Client);
+
+        // Add semantic attributes to the span
+        activity?.SetTag("webhook.url", webhookUrl);
+        activity?.SetTag("gps.latitude", payload.Latitude);
+        activity?.SetTag("gps.longitude", payload.Longitude);
+        activity?.SetTag("gps.speed", payload.Speed);
+        activity?.SetTag("gps.bearing", payload.Bearing);
+        activity?.SetTag("gps.timestamp", payload.Timestamp.ToString("O"));
+
         try
         {
             _logger.LogDebug("Forwarding GPS payload to {WebhookUrl}", webhookUrl);
@@ -53,24 +75,35 @@ public class WebhookForwarderService : IWebhookForwarderService
 
             var response = await _httpClient.SendAsync(request, cancellationToken);
 
+            // Record response status
+            activity?.SetTag("http.status_code", (int)response.StatusCode);
+            activity?.SetTag("webhook.success", response.IsSuccessStatusCode);
+
             if (response.IsSuccessStatusCode)
             {
                 _logger.LogInformation("Successfully forwarded GPS payload. Lat: {Lat}, Lng: {Lng}",
                     payload.Latitude, payload.Longitude);
+                activity?.SetStatus(ActivityStatusCode.Ok);
                 return true;
             }
 
             _logger.LogWarning("Webhook returned non-success status: {StatusCode}", response.StatusCode);
+            activity?.SetStatus(ActivityStatusCode.Error, $"HTTP {(int)response.StatusCode}");
             return false;
         }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "Failed to forward GPS payload");
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.SetTag("error.type", ex.GetType().Name);
+            activity?.SetTag("error.message", ex.Message);
             return false;
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Webhook request timed out");
+            activity?.SetStatus(ActivityStatusCode.Error, "Timeout");
+            activity?.SetTag("error.type", "Timeout");
             return false;
         }
     }

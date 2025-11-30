@@ -18,6 +18,10 @@ services:
       # - Webhook__DefaultUrl=${WEBHOOK_URL}
       # - Webhook__TimeoutSeconds=30
       # - Webhook__RetryCount=3
+      # OpenTelemetry configuration
+      - OpenTelemetry__ServiceName=GPSim.Server
+      # Set OTLP endpoint if using Jaeger, Zipkin, or other collector
+      # - OpenTelemetry__OtlpEndpoint=http://jaeger:4317
     volumes:
       # Persist route data
       - gpsim-data:/app/Data
