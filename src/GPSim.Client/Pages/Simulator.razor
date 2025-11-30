@@ -539,7 +539,10 @@
                 Speed = speedMetersPerSecond,
                 Bearing = bearing,
                 Accuracy = 5.0,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                SignalStrength = SignalBars,
+                BatteryLevel = BatteryPercentage,
+                SpeedLimit = CurrentSpeedLimit
             };
 
             var queryParams = new List<string>();

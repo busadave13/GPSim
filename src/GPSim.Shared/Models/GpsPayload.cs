@@ -39,4 +39,19 @@ public record GpsPayload
     /// Timestamp of the GPS reading
     /// </summary>
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Cell signal strength (0-5 bars)
+    /// </summary>
+    public int? SignalStrength { get; init; }
+
+    /// <summary>
+    /// Battery level percentage (0-100)
+    /// </summary>
+    public double? BatteryLevel { get; init; }
+
+    /// <summary>
+    /// Current road speed limit in MPH (null when unknown)
+    /// </summary>
+    public int? SpeedLimit { get; init; }
 }
