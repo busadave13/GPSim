@@ -12,14 +12,10 @@ namespace GPSim.Server.Controllers;
 public class ConfigurationController : ControllerBase
 {
     private readonly MapboxSettings _mapboxSettings;
-    private readonly WebhookSettings _webhookSettings;
 
-    public ConfigurationController(
-        IOptions<MapboxSettings> mapboxSettings,
-        IOptions<WebhookSettings> webhookSettings)
+    public ConfigurationController(IOptions<MapboxSettings> mapboxSettings)
     {
         _mapboxSettings = mapboxSettings.Value;
-        _webhookSettings = webhookSettings.Value;
     }
 
     /// <summary>
@@ -36,19 +32,17 @@ public class ConfigurationController : ControllerBase
     }
 
     /// <summary>
-    /// Gets the resolved webhook configuration (env vars take precedence over appsettings)
+    /// Gets the webhook configuration from environment variables
     /// </summary>
     [HttpGet("webhook")]
     public ActionResult<WebhookConfigResponse> GetWebhookConfig()
     {
-        // Resolve from environment variables with fallback to appsettings
-        var webhookUrl = Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_URL")
-            ?? _webhookSettings.DefaultUrl;
-        var webhookHeaders = Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_HEADERS")
-            ?? _webhookSettings.DefaultHeaders;
+        // Read webhook configuration from environment variables only
+        var webhookUrl = Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_URL") ?? string.Empty;
+        var webhookHeaders = Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_HEADERS") ?? string.Empty;
         
-        // Parse interval from environment variable
-        var intervalMs = _webhookSettings.IntervalMs;
+        // Parse interval from environment variable with default of 1000ms
+        var intervalMs = 1000;
         var intervalEnv = Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_INTERVAL_MS");
         if (!string.IsNullOrEmpty(intervalEnv) && int.TryParse(intervalEnv, out var parsedInterval))
         {

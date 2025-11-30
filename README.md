@@ -87,19 +87,13 @@ GPSim can be configured via environment variables or `appsettings.json`. Environ
     "AccessToken": "YOUR_MAPBOX_ACCESS_TOKEN"
   },
   "Webhook": {
-    "DefaultUrl": "https://your-webhook-endpoint.com/gps",
-    "DefaultHeaders": "Authorization:Bearer token",
-    "IntervalMs": 1000,
     "TimeoutSeconds": 30,
     "RetryCount": 3
-  },
-  "OpenTelemetry": {
-    "ServiceName": "GPSim.Server",
-    "OtlpEndpoint": "http://localhost:4317",
-    "Protocol": "grpc"
   }
 }
 ```
+
+**Note:** Webhook URL, headers, and interval are configured via environment variables only. OpenTelemetry is also configured via standard OTEL environment variables.
 
 ## OpenTelemetry
 
@@ -118,13 +112,13 @@ GPSim includes built-in OpenTelemetry support for distributed tracing. This prov
 
 ### Configuration
 
-GPSim uses **standard OTEL environment variables** with fallback to appsettings.json:
+GPSim uses **standard OTEL environment variables**:
 
-| Environment Variable | appsettings.json Fallback | Description |
-|---------------------|---------------------------|-------------|
-| `OTEL_SERVICE_NAME` | `OpenTelemetry:ServiceName` | Service name in traces (default: `GPSim.Server`) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `OpenTelemetry:OtlpEndpoint` | OTLP collector endpoint (e.g., `http://localhost:4317`) |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `OpenTelemetry:Protocol` | Transport protocol: `grpc` (default) or `http/protobuf` |
+| Environment Variable | Description |
+|---------------------|-------------|
+| `OTEL_SERVICE_NAME` | Service name in traces (default: `GPSim.Server`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint (e.g., `http://localhost:4317`) |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | Transport protocol: `grpc` (default) or `http/protobuf` |
 
 ### Docker with Jaeger
 

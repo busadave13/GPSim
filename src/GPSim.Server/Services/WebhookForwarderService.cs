@@ -35,10 +35,9 @@ public class WebhookForwarderService : IWebhookForwarderService
 
     public async Task<bool> ForwardAsync(GpsPayload payload, string? webhookUrlOverride = null, string? webhookHeaders = null, CancellationToken cancellationToken = default)
     {
-        // Resolve webhook URL: parameter override > environment variable > appsettings
+        // Resolve webhook URL: parameter override > environment variable
         var webhookUrl = webhookUrlOverride 
-            ?? Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_URL")
-            ?? _settings.DefaultUrl;
+            ?? Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_URL");
         
         if (string.IsNullOrWhiteSpace(webhookUrl))
         {
@@ -46,9 +45,8 @@ public class WebhookForwarderService : IWebhookForwarderService
             return false;
         }
 
-        // Resolve default headers: environment variable > appsettings
-        var defaultHeaders = Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_HEADERS")
-            ?? _settings.DefaultHeaders;
+        // Resolve default headers from environment variable
+        var defaultHeaders = Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_HEADERS");
 
         // Parse headers: merge default headers with override headers (override takes precedence)
         var customHeaders = ParseHeaders(defaultHeaders);
