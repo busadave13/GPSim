@@ -10,22 +10,8 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "GPSIM_WEBHOOK_URL": "http://localhost:8080/api/location",
         "GPSIM_WEBHOOK_HEADERS": "X-Mock-ID:location/200",
-        "GPSIM_WEBHOOK_INTERVAL_MS": "1000",
-        "OTEL_SERVICE_NAME": "GPSim",
-        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:18889",
-        "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"
-      }
-    },
-    "https": {
-      "commandName": "Project",
-      "dotnetRunMessages": true,
-      "launchBrowser": false,
-      "applicationUrl": "https://localhost:7197;http://localhost:5178",
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "GPSIM_WEBHOOK_URL": "http://localhost:8080/api/location",
-        "GPSIM_WEBHOOK_HEADERS": "X-Mock-ID:location/200",
-        "GPSIM_WEBHOOK_INTERVAL_MS": "1000",
+        "GPSIM_WEBHOOK_INTERVAL_MS": "5000",
+        "GPSIM_BATTERY_DRAIN_HOURS": "1",
         "OTEL_SERVICE_NAME": "GPSim",
         "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:18889",
         "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"
