@@ -90,8 +90,8 @@
             <div class="mb-2">
                 <label class="form-label">Update Interval: @Settings.IntervalMs ms</label>
                 <input type="range" class="form-range" @bind="Settings.IntervalMs" @bind:event="oninput" 
-                    min="50" max="500" step="10" />
-                <small class="text-muted">Controls animation smoothness</small>
+                    min="100" max="1000" step="50" />
+                <small class="text-muted">Controls animation smoothness (100-1000ms)</small>
             </div>
 
             <div class="mb-2">
@@ -307,10 +307,10 @@
     {
         try
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Settings.IntervalMs));
-
-            while (await timer.WaitForNextTickAsync(cancellationToken))
+            // Use Task.Delay instead of PeriodicTimer so interval changes take effect immediately
+            while (!cancellationToken.IsCancellationRequested)
             {
+                await Task.Delay(Settings.IntervalMs, cancellationToken);
                 await SimulationTickAsync();
             }
         }
