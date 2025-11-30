@@ -56,6 +56,26 @@ public class ConfigurationController : ControllerBase
             IntervalMs = intervalMs
         });
     }
+
+    /// <summary>
+    /// Gets the phone simulation configuration from environment variables
+    /// </summary>
+    [HttpGet("phone")]
+    public ActionResult<PhoneConfigResponse> GetPhoneConfig()
+    {
+        // Parse battery drain hours from environment variable with default of 1 hour
+        var batteryDrainHours = 1.0;
+        var batteryEnv = Environment.GetEnvironmentVariable("GPSIM_BATTERY_DRAIN_HOURS");
+        if (!string.IsNullOrEmpty(batteryEnv) && double.TryParse(batteryEnv, out var parsedHours))
+        {
+            batteryDrainHours = parsedHours;
+        }
+
+        return Ok(new PhoneConfigResponse
+        {
+            BatteryDrainHours = batteryDrainHours
+        });
+    }
 }
 
 /// <summary>
@@ -75,4 +95,12 @@ public record WebhookConfigResponse
     public string DefaultUrl { get; init; } = string.Empty;
     public string DefaultHeaders { get; init; } = string.Empty;
     public int IntervalMs { get; init; } = 1000;
+}
+
+/// <summary>
+/// Response model for phone simulation configuration
+/// </summary>
+public record PhoneConfigResponse
+{
+    public double BatteryDrainHours { get; init; } = 1.0;
 }

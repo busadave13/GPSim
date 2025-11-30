@@ -10,7 +10,65 @@
     <!-- Map Container -->
     <div id="map" class="map-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
 
-    <!-- Control Panel -->
+    <!-- Phone Status Panel (Left Side) -->
+    <div class="phone-status-panel">
+        <h6 class="mb-2">📱 Phone Status</h6>
+        
+        <!-- Signal Strength -->
+        <div class="status-section">
+            <div class="status-label">Signal Strength</div>
+            <div class="signal-container">
+                <div class="signal-bars">
+                    @for (int i = 1; i <= 5; i++)
+                    {
+                        var barIndex = i;
+                        <div class="signal-bar @(barIndex <= SignalBars ? "active" : "")" 
+                             style="height: @(20 + (barIndex * 8))%"></div>
+                    }
+                </div>
+                <span class="signal-text">@SignalBars/5</span>
+            </div>
+            <input type="range" 
+                   class="form-range signal-slider" 
+                   min="0" 
+                   max="5" 
+                   step="1"
+                   value="@SignalBars"
+                   @oninput="OnSignalSliderChanged" />
+        </div>
+
+        <!-- Battery -->
+        <div class="status-section">
+            <div class="status-label">Battery</div>
+            <div class="battery-container">
+                <div class="battery-icon">
+                    <div class="battery-body">
+                        <div class="battery-fill @GetBatteryColorClass()" style="width: @BatteryPercentage.ToString("F0")%;"></div>
+                    </div>
+                    <div class="battery-cap"></div>
+                </div>
+                <span class="battery-text @GetBatteryColorClass()">@BatteryPercentage.ToString("F0")%</span>
+            </div>
+            @if (BatteryPercentage <= 0)
+            {
+                <div class="text-danger" style="font-size: 0.6rem;">⚠️ Battery depleted!</div>
+            }
+            else if (BatteryPercentage <= 20)
+            {
+                <div class="text-warning" style="font-size: 0.6rem;">⚠️ Low battery</div>
+            }
+            <input type="range" 
+                   class="form-range battery-slider @GetBatterySliderClass()" 
+                   min="0" 
+                   max="100" 
+                   step="1"
+                   value="@BatteryPercentage.ToString("F0")"
+                   @oninput="OnBatterySliderChanged" />
+            <small class="text-muted" style="font-size: 0.5rem;">Drains over @BatteryDrainHours.ToString("F1") hour(s)</small>
+        </div>
+    </div>
+
+    <!-- Control Panel (Right Side) -->
     <div class="control-panel">
         <h5 class="mb-3">🚗 GPS Simulator</h5>
 
@@ -177,6 +235,13 @@
     // Pause state tracking - using a field that's checked each tick
     private volatile bool IsPaused = false;
 
+    // Phone status simulation
+    private double BatteryDrainHours = 1.0; // Default 1 hour, configurable via GPSIM_BATTERY_DRAIN_HOURS
+    private double BatteryPercentage = 100.0;
+    private DateTime BatteryStartTime = DateTime.UtcNow;
+    private DateTime? PauseStartTime = null; // Track when pause started for battery calculation
+    private int SignalBars = 5;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -204,6 +269,13 @@
                 Settings.WebhookUrl = webhookConfig.DefaultUrl ?? "";
                 Settings.WebhookHeaders = webhookConfig.DefaultHeaders ?? "";
                 Settings.WebhookIntervalMs = webhookConfig.IntervalMs;
+            }
+
+            // Get phone simulation configuration from server
+            var phoneConfig = await Http.GetFromJsonAsync<PhoneConfig>("api/configuration/phone");
+            if (phoneConfig != null)
+            {
+                BatteryDrainHours = phoneConfig.BatteryDrainHours;
             }
 
             _mapService = new MapboxInteropService(JSRuntime);
@@ -339,6 +411,9 @@
         
         Console.WriteLine($"[DEBUG] Tick processing - IsPaused={isPausedNow}, Mode={SimulationMode}");
 
+        // Update battery drain
+        UpdateBatteryDrain();
+
         try
         {
             if (SimulationMode == Mode.Moving && CurrentRoute != null)
@@ -464,7 +539,10 @@
                 Speed = speedMetersPerSecond,
                 Bearing = bearing,
                 Accuracy = 5.0,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                SignalStrength = SignalBars,
+                BatteryLevel = BatteryPercentage,
+                SpeedLimit = CurrentSpeedLimit
             };
 
             var queryParams = new List<string>();
@@ -524,6 +602,8 @@
     {
         Console.WriteLine("[DEBUG] PauseSimulation called");
         IsPaused = true;
+        // Record when we started pausing for battery calculation
+        PauseStartTime = DateTime.UtcNow;
         Console.WriteLine($"[DEBUG] IsPaused set to {IsPaused}");
         StateHasChanged();
     }
@@ -536,6 +616,16 @@
         IsPaused = false;
         // Reset LastTickTime to prevent large time jump when resuming
         LastTickTime = DateTime.UtcNow;
+        
+        // Adjust BatteryStartTime to exclude the paused duration
+        // This ensures paused time doesn't count toward battery drain
+        if (PauseStartTime.HasValue)
+        {
+            var pausedDuration = DateTime.UtcNow - PauseStartTime.Value;
+            BatteryStartTime = BatteryStartTime.Add(pausedDuration);
+            PauseStartTime = null;
+        }
+        
         StateHasChanged();
     }
 
@@ -552,6 +642,72 @@
 
         // Fallback to configured speed (default 30 MPH) when speed limit is unknown
         return Settings.SpeedMph;
+    }
+
+    /// <summary>
+    /// Updates battery drain based on elapsed time (drains from 100% to 0% over configured hours)
+    /// </summary>
+    private void UpdateBatteryDrain()
+    {
+        if (!IsPaused && BatteryPercentage > 0)
+        {
+            var elapsedHours = (DateTime.UtcNow - BatteryStartTime).TotalHours;
+            var drainPerHour = 100.0 / BatteryDrainHours;
+            var drainAmount = elapsedHours * drainPerHour;
+            BatteryPercentage = Math.Max(0, 100.0 - drainAmount);
+        }
+    }
+
+    /// <summary>
+    /// Handles battery slider change
+    /// </summary>
+    private void OnBatterySliderChanged(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), out var newValue))
+        {
+            BatteryPercentage = Math.Clamp(newValue, 0, 100);
+            // Reset the start time to now with current percentage as the "starting" point
+            // Calculate what time would give us this percentage
+            var hoursToReachThisLevel = (100.0 - BatteryPercentage) / (100.0 / BatteryDrainHours);
+            BatteryStartTime = DateTime.UtcNow.AddHours(-hoursToReachThisLevel);
+        }
+    }
+
+    /// <summary>
+    /// Handles signal strength slider change
+    /// </summary>
+    private void OnSignalSliderChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var newValue))
+        {
+            SignalBars = Math.Clamp(newValue, 0, 5);
+        }
+    }
+
+    /// <summary>
+    /// Gets the CSS class for battery color based on percentage
+    /// </summary>
+    private string GetBatteryColorClass()
+    {
+        return BatteryPercentage switch
+        {
+            <= 10 => "battery-critical",
+            <= 20 => "battery-low",
+            <= 50 => "battery-medium",
+            _ => "battery-high"
+        };
+    }
+
+    /// <summary>
+    /// Gets the CSS class for battery slider color
+    /// </summary>
+    private string GetBatterySliderClass()
+    {
+        return BatteryPercentage switch
+        {
+            <= 20 => "battery-slider-low",
+            _ => ""
+        };
     }
 
     public async ValueTask DisposeAsync()
@@ -582,6 +738,7 @@
 
     private record MapboxConfig(string AccessToken, double CircleRadiusMiles = 0.1);
     private record WebhookConfig(string DefaultUrl, string DefaultHeaders, int IntervalMs = 1000);
+    private record PhoneConfig(double BatteryDrainHours = 1.0);
 
     private enum Mode
     {

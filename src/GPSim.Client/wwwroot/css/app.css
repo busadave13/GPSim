@@ -133,30 +133,61 @@ code {
     position: absolute;
     top: 10px;
     right: 10px;
-    width: 320px;
+    width: 260px;
     max-height: calc(100vh - 20px);
     overflow-y: auto;
     background: rgba(255, 255, 255, 0.95);
-    border-radius: 8px;
+    border-radius: 6px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-    padding: 15px;
+    padding: 11px;
     z-index: 1000;
-    font-size: 1.05rem;
+    font-size: 0.74rem; /* Increased from 0.67rem by 10% */
+}
+
+.control-panel h5 {
+    font-size: 0.84rem; /* Increased from 0.76rem by 10% */
+    margin-bottom: 0.55rem;
 }
 
 .control-panel .section-title {
     font-weight: 600;
-    font-size: 1.1rem;
+    font-size: 0.77rem; /* Increased from 0.7rem by 10% */
     color: #495057;
-    margin-bottom: 8px;
+    margin-bottom: 5px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.4px;
 }
 
 .control-panel .form-label {
-    font-size: 1rem;
-    margin-bottom: 2px;
+    font-size: 0.7rem; /* Increased from 0.64rem by 10% */
+    margin-bottom: 1px;
     font-weight: 500;
+}
+
+.control-panel small {
+    font-size: 0.59rem; /* Increased from 0.54rem by 10% */
+}
+
+.control-panel .btn-sm {
+    font-size: 0.64rem; /* Increased from 0.58rem by 10% */
+    padding: 0.13rem 0.35rem;
+}
+
+.control-panel .form-control-sm {
+    font-size: 0.67rem; /* Increased from 0.61rem by 10% */
+    padding: 0.18rem 0.35rem;
+}
+
+.control-panel .form-range {
+    height: 0.7rem;
+}
+
+.control-panel .mb-2 {
+    margin-bottom: 0.44rem !important;
+}
+
+.control-panel .mb-3 {
+    margin-bottom: 0.66rem !important;
 }
 
 .simulation-status {
@@ -208,8 +239,152 @@ code {
 
 .coordinate-display {
     background: #f8f9fa;
-    padding: 5px 8px;
-    border-radius: 4px;
+    padding: 3px 6px;
+    border-radius: 3px;
     font-family: 'Courier New', monospace;
-    font-size: 0.95rem;
+    font-size: 0.67rem; /* Increased from 0.61rem by 10% */
+}
+
+/* Phone Status Panel (Left Side) */
+.phone-status-panel {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 160px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    padding: 10px;
+    z-index: 1000;
+    font-size: 0.7rem;
+}
+
+.phone-status-panel h6 {
+    font-size: 0.75rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.phone-status-panel .status-section {
+    margin-bottom: 12px;
+}
+
+.phone-status-panel .status-section:last-child {
+    margin-bottom: 0;
+}
+
+.phone-status-panel .status-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+/* Signal Strength Bars */
+.signal-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.signal-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 20px;
+}
+
+.signal-bar {
+    width: 6px;
+    background: #dee2e6;
+    border-radius: 1px;
+    transition: background-color 0.2s ease;
+}
+
+.signal-bar.active {
+    background: #28a745;
+}
+
+.signal-text {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #495057;
+}
+
+.signal-slider {
+    height: 0.5rem;
+}
+
+/* Battery Icon */
+.battery-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.battery-icon {
+    display: flex;
+    align-items: center;
+}
+
+.battery-body {
+    width: 30px;
+    height: 14px;
+    border: 2px solid #495057;
+    border-radius: 3px;
+    padding: 1px;
+    position: relative;
+    overflow: hidden;
+}
+
+.battery-fill {
+    height: 100%;
+    border-radius: 1px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.battery-cap {
+    width: 3px;
+    height: 8px;
+    background: #495057;
+    border-radius: 0 2px 2px 0;
+    margin-left: 1px;
+}
+
+.battery-text {
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+/* Battery Colors */
+.battery-high {
+    background-color: #28a745;
+    color: #28a745;
+}
+
+.battery-medium {
+    background-color: #ffc107;
+    color: #856404;
+}
+
+.battery-low {
+    background-color: #fd7e14;
+    color: #fd7e14;
+}
+
+.battery-critical {
+    background-color: #dc3545;
+    color: #dc3545;
+}
+
+.battery-slider {
+    height: 0.5rem;
+}
+
+.battery-slider-low {
+    accent-color: #dc3545;
 }
