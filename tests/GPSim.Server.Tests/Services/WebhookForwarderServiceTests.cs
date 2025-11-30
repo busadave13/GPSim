@@ -23,7 +23,6 @@ public class WebhookForwarderServiceTests
         _loggerMock = new Mock<ILogger<WebhookForwarderService>>();
         _settings = new WebhookSettings
         {
-            DefaultUrl = "https://example.com/webhook",
             TimeoutSeconds = 30,
             RetryCount = 3
         };
@@ -40,15 +39,13 @@ public class WebhookForwarderServiceTests
     {
         return new GpsPayload
         {
-            DeviceId = "test-device",
             Latitude = 37.7749,
             Longitude = -122.4194,
             Altitude = 0,
             Speed = 25.5,
             Bearing = 180.0,
             Accuracy = 5.0,
-            Timestamp = DateTime.UtcNow,
-            SequenceNumber = 1
+            Timestamp = DateTime.UtcNow
         };
     }
 
@@ -70,8 +67,8 @@ public class WebhookForwarderServiceTests
         var service = CreateService(handlerMock.Object);
         var payload = CreateTestPayload();
 
-        // Act
-        var result = await service.ForwardAsync(payload);
+        // Act - use webhook override since no environment variable is set
+        var result = await service.ForwardAsync(payload, webhookUrlOverride: "https://example.com/webhook");
 
         // Assert
         result.Should().BeTrue();
@@ -80,24 +77,7 @@ public class WebhookForwarderServiceTests
     [Fact]
     public async Task ForwardAsync_WithNoWebhookUrl_ReturnsFalse()
     {
-        // Arrange
-        _settings.DefaultUrl = null!;
-        var handlerMock = new Mock<HttpMessageHandler>();
-        var service = CreateService(handlerMock.Object);
-        var payload = CreateTestPayload();
-
-        // Act
-        var result = await service.ForwardAsync(payload);
-
-        // Assert
-        result.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task ForwardAsync_WithEmptyWebhookUrl_ReturnsFalse()
-    {
-        // Arrange
-        _settings.DefaultUrl = "";
+        // Arrange - no environment variable set and no override
         var handlerMock = new Mock<HttpMessageHandler>();
         var service = CreateService(handlerMock.Object);
         var payload = CreateTestPayload();
@@ -158,7 +138,7 @@ public class WebhookForwarderServiceTests
         var payload = CreateTestPayload();
 
         // Act
-        await service.ForwardAsync(payload, webhookHeaders: customHeaders);
+        await service.ForwardAsync(payload, webhookUrlOverride: "https://example.com/webhook", webhookHeaders: customHeaders);
 
         // Assert
         capturedRequest.Should().NotBeNull();
@@ -169,10 +149,9 @@ public class WebhookForwarderServiceTests
     }
 
     [Fact]
-    public async Task ForwardAsync_WithServerError_ReturnsFalseAfterRetries()
+    public async Task ForwardAsync_WithServerError_ReturnsFalse()
     {
         // Arrange
-        _settings.RetryCount = 1; // Reduce retries for faster test
         var callCount = 0;
 
         var handlerMock = new Mock<HttpMessageHandler>();
@@ -192,11 +171,11 @@ public class WebhookForwarderServiceTests
         var payload = CreateTestPayload();
 
         // Act
-        var result = await service.ForwardAsync(payload);
+        var result = await service.ForwardAsync(payload, webhookUrlOverride: "https://example.com/webhook");
 
         // Assert
         result.Should().BeFalse();
-        callCount.Should().Be(2); // Initial + 1 retry
+        callCount.Should().Be(1); // Single attempt, no retries
     }
 
     [Fact]
@@ -221,7 +200,7 @@ public class WebhookForwarderServiceTests
         // Act & Assert
         // TaskCanceledException inherits from OperationCanceledException
         var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => service.ForwardAsync(payload, cancellationToken: cts.Token));
+            () => service.ForwardAsync(payload, webhookUrlOverride: "https://example.com/webhook", cancellationToken: cts.Token));
         exception.Should().NotBeNull();
     }
 
@@ -249,7 +228,7 @@ public class WebhookForwarderServiceTests
         var payload = CreateTestPayload();
 
         // Act
-        await service.ForwardAsync(payload, webhookHeaders: "");
+        await service.ForwardAsync(payload, webhookUrlOverride: "https://example.com/webhook", webhookHeaders: "");
 
         // Assert
         capturedRequest.Should().NotBeNull();
@@ -276,7 +255,7 @@ public class WebhookForwarderServiceTests
         var payload = CreateTestPayload();
 
         // Act
-        await service.ForwardAsync(payload, webhookHeaders: null);
+        await service.ForwardAsync(payload, webhookUrlOverride: "https://example.com/webhook", webhookHeaders: null);
 
         // Assert
         capturedRequest.Should().NotBeNull();
@@ -304,7 +283,7 @@ public class WebhookForwarderServiceTests
         var payload = CreateTestPayload();
 
         // Act
-        await service.ForwardAsync(payload, webhookHeaders: malformedHeaders);
+        await service.ForwardAsync(payload, webhookUrlOverride: "https://example.com/webhook", webhookHeaders: malformedHeaders);
 
         // Assert
         capturedRequest.Should().NotBeNull();
@@ -333,7 +312,7 @@ public class WebhookForwarderServiceTests
         var payload = CreateTestPayload();
 
         // Act
-        await service.ForwardAsync(payload, webhookHeaders: headers);
+        await service.ForwardAsync(payload, webhookUrlOverride: "https://example.com/webhook", webhookHeaders: headers);
 
         // Assert
         capturedRequest.Should().NotBeNull();

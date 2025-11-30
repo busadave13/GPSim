@@ -21,6 +21,26 @@
                 <span class="status-indicator @GetStatusClass()"></span>
                 <span class="ms-2">@GetStatusText()</span>
             </div>
+            
+            <!-- Pause/Resume Buttons -->
+            @if (SimulationMode != Mode.Initializing)
+            {
+                <div class="mt-2">
+                    @if (IsPaused)
+                    {
+                        <button class="btn btn-success btn-sm w-100" @onclick="ResumeSimulation">
+                            ▶️ Resume
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-warning btn-sm w-100" @onclick="PauseSimulation">
+                            ⏸️ Pause
+                        </button>
+                    }
+                </div>
+            }
+            
             @if (CurrentPosition != null)
             {
                 <div class="coordinate-display" style="font-size: 0.8rem;">
@@ -35,10 +55,10 @@
                         }
                         else
                         {
-                            <div><strong>Speed:</strong> @Settings.SpeedMph.ToString("F0") MPH <span class="text-warning">(fallback)</span></div>
+                            <div><strong>Speed:</strong> @Settings.SpeedMph.ToString("F0") MPH <span
+                                    class="text-warning">(fallback)</span></div>
                         }
                     }
-                    <div><strong>Updates:</strong> @SequenceNumber</div>
                     <div><strong>Zoom:</strong> @CurrentZoomLevel.ToString("F1")</div>
                 </div>
             }
@@ -68,9 +88,17 @@
             <div class="section-title">Settings</div>
 
             <div class="mb-2">
-                <label class="form-label">Update Interval (ms)</label>
-                <input type="number" class="form-control form-control-sm" @bind="Settings.IntervalMs" min="100"
-                    max="10000" step="100" />
+                <label class="form-label">Update Interval: @Settings.IntervalMs ms</label>
+                <input type="range" class="form-range" @bind="Settings.IntervalMs" @bind:event="oninput" 
+                    min="50" max="500" step="10" />
+                <small class="text-muted">Controls animation smoothness</small>
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label">Webhook Interval (ms)</label>
+                <input type="number" class="form-control form-control-sm" @bind="Settings.WebhookIntervalMs" 
+                    min="100" max="60000" step="100" />
+                <small class="text-muted">How often GPS data is sent to webhook</small>
             </div>
 
             <div class="mb-2">
@@ -78,11 +106,6 @@
                 <input type="number" class="form-control form-control-sm" @bind="Settings.SpeedMph" min="1" max="200"
                     step="1" />
                 <small class="text-muted">Used when road speed limit is unavailable</small>
-            </div>
-
-            <div class="mb-2">
-                <label class="form-label">Device ID</label>
-                <input type="text" class="form-control form-control-sm" @bind="Settings.DeviceId" />
             </div>
 
             <div class="mb-2">
@@ -131,24 +154,28 @@
     private SimulationSettings Settings = new()
     {
         IntervalMs = 100,
+        WebhookIntervalMs = 1000,
         SpeedMph = 25.0,
-        DeviceId = $"sim-{Guid.NewGuid().ToString()[..8]}",
-        WebhookUrl = null
+        WebhookUrl = "",
+        WebhookHeaders = ""
     };
 
     // Simulation tracking
     private double SimulationProgress = 0;
-    private int SequenceNumber = 0;
     private DateTime RouteStartTime;
     private double DistanceTraveledMeters = 0;
     private DateTime LastTickTime;
+    private DateTime LastWebhookSendTime = DateTime.MinValue;
 
     // Speed limit tracking
     private int? CurrentSpeedLimit = null;
     private int CurrentSegmentIndex = 0;
-    
+
     // Map state tracking
     private double CurrentZoomLevel = 12.0;
+
+    // Pause state tracking - using a field that's checked each tick
+    private volatile bool IsPaused = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -168,6 +195,15 @@
             {
                 _accessToken = config.AccessToken;
                 _circleRadiusMiles = config.CircleRadiusMiles;
+            }
+
+            // Get webhook configuration from server (resolved from env vars or appsettings)
+            var webhookConfig = await Http.GetFromJsonAsync<WebhookConfig>("api/configuration/webhook");
+            if (webhookConfig != null)
+            {
+                Settings.WebhookUrl = webhookConfig.DefaultUrl ?? "";
+                Settings.WebhookHeaders = webhookConfig.DefaultHeaders ?? "";
+                Settings.WebhookIntervalMs = webhookConfig.IntervalMs;
             }
 
             _mapService = new MapboxInteropService(JSRuntime);
@@ -292,6 +328,17 @@
     {
         if (_mapService == null || CurrentPosition == null) return;
 
+        // Skip all processing if paused - check at the beginning
+        var isPausedNow = IsPaused;
+        if (isPausedNow)
+        {
+            Console.WriteLine($"[DEBUG] Tick skipped - IsPaused={isPausedNow}");
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        
+        Console.WriteLine($"[DEBUG] Tick processing - IsPaused={isPausedNow}, Mode={SimulationMode}");
+
         try
         {
             if (SimulationMode == Mode.Moving && CurrentRoute != null)
@@ -337,9 +384,11 @@
                     // Animate marker
                     await _mapService.AnimateMarkerAsync(lng, lat, interpolated.Bearing, Settings.IntervalMs);
 
-                    // Send GPS data with actual current speed
-                    _ = SendGpsDataAsync(lat, lng, interpolated.Bearing, currentSpeedMph);
-                    SequenceNumber++;
+                    // Send GPS data with actual current speed (only if not paused)
+                    if (!IsPaused)
+                    {
+                        _ = SendGpsDataAsync(lat, lng, interpolated.Bearing, currentSpeedMph);
+                    }
                 }
 
                 // Check if we've reached the destination
@@ -348,11 +397,10 @@
                     await OnReachedDestinationAsync();
                 }
             }
-            else if (SimulationMode == Mode.Stationary)
+            else if (SimulationMode == Mode.Stationary && !IsPaused)
             {
-                // When stationary, just keep sending current position
+                // When stationary, just keep sending current position (only if not paused)
                 _ = SendGpsDataAsync(CurrentPosition.Latitude, CurrentPosition.Longitude, 0, 0);
-                SequenceNumber++;
             }
 
             await InvokeAsync(StateHasChanged);
@@ -393,20 +441,30 @@
     {
         try
         {
+            // Check if enough time has passed since last webhook send
+            var now = DateTime.UtcNow;
+            var timeSinceLastSend = (now - LastWebhookSendTime).TotalMilliseconds;
+            if (timeSinceLastSend < Settings.WebhookIntervalMs)
+            {
+                // Not enough time has passed, skip this webhook send
+                return;
+            }
+            
+            // Update last send time
+            LastWebhookSendTime = now;
+
             // Convert MPH to m/s
             var speedMetersPerSecond = speedMph * 1609.344 / 3600.0;
 
             var payload = new GpsPayload
             {
-                DeviceId = Settings.DeviceId,
                 Latitude = latitude,
                 Longitude = longitude,
                 Altitude = 0,
                 Speed = speedMetersPerSecond,
                 Bearing = bearing,
                 Accuracy = 5.0,
-                Timestamp = DateTime.UtcNow,
-                SequenceNumber = SequenceNumber
+                Timestamp = DateTime.UtcNow
             };
 
             var queryParams = new List<string>();
@@ -433,21 +491,53 @@
         }
     }
 
-    private string GetStatusClass() => SimulationMode switch
+    private string GetStatusClass()
     {
-        Mode.Initializing => "status-idle",
-        Mode.Stationary => "status-paused",
-        Mode.Moving => "status-running",
-        _ => "status-idle"
-    };
+        if (IsPaused) return "status-idle";
+        
+        return SimulationMode switch
+        {
+            Mode.Initializing => "status-idle",
+            Mode.Stationary => "status-paused",
+            Mode.Moving => "status-running",
+            _ => "status-idle"
+        };
+    }
 
-    private string GetStatusText() => SimulationMode switch
+    private string GetStatusText()
     {
-        Mode.Initializing => "Initializing...",
-        Mode.Stationary => "Stationary (sending updates)",
-        Mode.Moving => "Moving to destination",
-        _ => "Unknown"
-    };
+        if (IsPaused) return "⏸️ Paused";
+        
+        return SimulationMode switch
+        {
+            Mode.Initializing => "Initializing...",
+            Mode.Stationary => "Stationary (sending updates)",
+            Mode.Moving => "Moving to destination",
+            _ => "Unknown"
+        };
+    }
+
+    /// <summary>
+    /// Pauses the simulation
+    /// </summary>
+    private void PauseSimulation()
+    {
+        Console.WriteLine("[DEBUG] PauseSimulation called");
+        IsPaused = true;
+        Console.WriteLine($"[DEBUG] IsPaused set to {IsPaused}");
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Resumes the simulation
+    /// </summary>
+    private void ResumeSimulation()
+    {
+        IsPaused = false;
+        // Reset LastTickTime to prevent large time jump when resuming
+        LastTickTime = DateTime.UtcNow;
+        StateHasChanged();
+    }
 
     /// <summary>
     /// Gets the current speed - uses road speed limit if available, otherwise fallback speed
@@ -491,6 +581,7 @@
     }
 
     private record MapboxConfig(string AccessToken, double CircleRadiusMiles = 0.1);
+    private record WebhookConfig(string DefaultUrl, string DefaultHeaders, int IntervalMs = 1000);
 
     private enum Mode
     {

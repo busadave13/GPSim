@@ -6,19 +6,19 @@ namespace GPSim.Shared.Models;
 public class SimulationSettings
 {
     /// <summary>
-    /// Interval between GPS updates in milliseconds
+    /// Interval between UI/position updates in milliseconds (controls animation smoothness)
     /// </summary>
-    public int IntervalMs { get; set; } = 1000;
+    public int IntervalMs { get; set; } = 100;
+
+    /// <summary>
+    /// Interval between webhook requests in milliseconds
+    /// </summary>
+    public int WebhookIntervalMs { get; set; } = 1000;
 
     /// <summary>
     /// Simulation speed in miles per hour
     /// </summary>
     public double SpeedMph { get; set; } = 30.0;
-
-    /// <summary>
-    /// Device identifier for GPS payloads
-    /// </summary>
-    public string DeviceId { get; set; } = "simulator";
 
     /// <summary>
     /// Optional webhook URL override

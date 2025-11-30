@@ -6,11 +6,6 @@ namespace GPSim.Shared.Models;
 public record GpsPayload
 {
     /// <summary>
-    /// Device/simulator identifier
-    /// </summary>
-    public string DeviceId { get; init; } = string.Empty;
-
-    /// <summary>
     /// Latitude in decimal degrees
     /// </summary>
     public double Latitude { get; init; }
@@ -44,14 +39,4 @@ public record GpsPayload
     /// Timestamp of the GPS reading
     /// </summary>
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
-
-    /// <summary>
-    /// Sequence number for ordering
-    /// </summary>
-    public int SequenceNumber { get; init; }
-
-    /// <summary>
-    /// Optional simulation ID for tracking
-    /// </summary>
-    public Guid? SimulationId { get; init; }
 }

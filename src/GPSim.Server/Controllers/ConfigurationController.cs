@@ -30,6 +30,32 @@ public class ConfigurationController : ControllerBase
             CircleRadiusMiles = _mapboxSettings.CircleRadiusMiles
         });
     }
+
+    /// <summary>
+    /// Gets the webhook configuration from environment variables
+    /// </summary>
+    [HttpGet("webhook")]
+    public ActionResult<WebhookConfigResponse> GetWebhookConfig()
+    {
+        // Read webhook configuration from environment variables only
+        var webhookUrl = Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_URL") ?? string.Empty;
+        var webhookHeaders = Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_HEADERS") ?? string.Empty;
+        
+        // Parse interval from environment variable with default of 1000ms
+        var intervalMs = 1000;
+        var intervalEnv = Environment.GetEnvironmentVariable("GPSIM_WEBHOOK_INTERVAL_MS");
+        if (!string.IsNullOrEmpty(intervalEnv) && int.TryParse(intervalEnv, out var parsedInterval))
+        {
+            intervalMs = parsedInterval;
+        }
+
+        return Ok(new WebhookConfigResponse
+        {
+            DefaultUrl = webhookUrl,
+            DefaultHeaders = webhookHeaders,
+            IntervalMs = intervalMs
+        });
+    }
 }
 
 /// <summary>
@@ -39,4 +65,14 @@ public record MapboxConfigResponse
 {
     public string AccessToken { get; init; } = string.Empty;
     public double CircleRadiusMiles { get; init; } = 0.1;
+}
+
+/// <summary>
+/// Response model for webhook configuration
+/// </summary>
+public record WebhookConfigResponse
+{
+    public string DefaultUrl { get; init; } = string.Empty;
+    public string DefaultHeaders { get; init; } = string.Empty;
+    public int IntervalMs { get; init; } = 1000;
 }

@@ -14,10 +14,12 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       # Mapbox configuration (from .env file)
       - Mapbox__AccessToken=${MAPBOX_ACCESS_TOKEN}
-      # Optional: Webhook configuration overrides
-      # - Webhook__DefaultUrl=${WEBHOOK_URL}
-      # - Webhook__TimeoutSeconds=30
-      # - Webhook__RetryCount=3
+      - GPSIM_WEBHOOK_URL=http://host.docker.internal:8080/api/location
+      - GPSIM_WEBHOOK_HEADERS=X-Mock-ID:test/200
+      - GPSIM_WEBHOOK_INTERVAL_MS=1000
+      - OTEL_SERVICE_NAME=GPSim
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:18889
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
     volumes:
       # Persist route data
       - gpsim-data:/app/Data

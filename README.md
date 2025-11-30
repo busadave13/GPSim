@@ -65,7 +65,21 @@ docker compose up --build
 
 ## Configuration
 
-Update `src/GPSim.Server/appsettings.json` with your settings:
+GPSim can be configured via environment variables or `appsettings.json`. Environment variables take precedence.
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `MAPBOX_ACCESS_TOKEN` | Mapbox API access token (required) |
+| `GPSIM_WEBHOOK_URL` | Default webhook URL for GPS payload forwarding |
+| `GPSIM_WEBHOOK_HEADERS` | Default headers (format: `Header1:Value1;Header2:Value2`) |
+| `GPSIM_WEBHOOK_INTERVAL_MS` | Webhook send interval in milliseconds (default: 1000) |
+| `OTEL_SERVICE_NAME` | OpenTelemetry service name |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | Transport protocol (`grpc` or `http/protobuf`) |
+
+### appsettings.json
 
 ```json
 {
@@ -73,12 +87,62 @@ Update `src/GPSim.Server/appsettings.json` with your settings:
     "AccessToken": "YOUR_MAPBOX_ACCESS_TOKEN"
   },
   "Webhook": {
-    "DefaultUrl": "https://your-webhook-endpoint.com/gps",
     "TimeoutSeconds": 30,
     "RetryCount": 3
   }
 }
 ```
+
+**Note:** Webhook URL, headers, and interval are configured via environment variables only. OpenTelemetry is also configured via standard OTEL environment variables.
+
+## OpenTelemetry
+
+GPSim includes built-in OpenTelemetry support for distributed tracing. This provides observability into webhook calls and API requests.
+
+### Features
+
+- **Automatic HTTP Tracing**: All incoming API requests and outgoing webhook calls are automatically traced
+- **Custom Webhook Spans**: Webhook forwarding includes detailed span attributes:
+  - `webhook.url` - Target webhook URL
+  - `gps.latitude` / `gps.longitude` - GPS coordinates
+  - `gps.speed` / `gps.bearing` - Movement data
+  - `http.status_code` - Response status
+  - `webhook.success` - Success/failure indicator
+- **Flexible Export**: Console exporter for development, OTLP for production
+
+### Configuration
+
+GPSim uses **standard OTEL environment variables**:
+
+| Environment Variable | Description |
+|---------------------|-------------|
+| `OTEL_SERVICE_NAME` | Service name in traces (default: `GPSim.Server`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint (e.g., `http://localhost:4317`) |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | Transport protocol: `grpc` (default) or `http/protobuf` |
+
+### Docker with Jaeger
+
+To use OpenTelemetry with Jaeger, add to your `docker-compose.yml`:
+
+```yaml
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  gpsim:
+    # ... existing config ...
+    environment:
+      - OTEL_SERVICE_NAME=GPSim.Server
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+```
+
+Then view traces at `http://localhost:16686`.
 
 ## Running the Application
 
